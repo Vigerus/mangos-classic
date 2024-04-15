@@ -372,7 +372,7 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
             PlayerbotMgr* mgr = GetPlayer()->GetPlayerbotMgr();
             if (mgr && GetPlayer()->GetGuildId())
             {
-                mgr->LoopThroughBots([&](Player* bot)
+                mgr->ForEachPlayerbot([&](Player* bot)
                 {
                     if (bot->GetGuildId() == GetPlayer()->GetGuildId())
                     {
