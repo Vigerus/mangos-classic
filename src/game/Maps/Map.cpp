@@ -48,10 +48,14 @@
 
 #ifdef ENABLE_PLAYERBOTS
 #include "playerbot/playerbot.h"
+#include "instancebot/InstanceBot.h"
 #endif
 
 Map::~Map()
 {
+   delete mp_instance_bot;
+   mp_instance_bot = nullptr;
+
     UnloadAll(true);
 
     if (m_persistentState)
@@ -440,6 +444,9 @@ bool Map::Add(Player* player)
 
     if (i_data)
         i_data->OnPlayerEnter(player);
+
+    if (mp_instance_bot)
+       mp_instance_bot->OnPlayerEnter(player);
 
     return true;
 }
@@ -998,6 +1005,9 @@ void Map::Update(const uint32& t_diff)
         i_data->Update(t_diff);
 
     m_weatherSystem->UpdateWeathers(t_diff);
+
+    if (mp_instance_bot)
+      mp_instance_bot->Update(t_diff);
 }
 
 void Map::Remove(Player* player, bool remove)
@@ -1009,6 +1019,9 @@ void Map::Remove(Player* player, bool remove)
         player->CleanupsBeforeDelete();
     else
         player->RemoveFromWorld();
+
+   if (mp_instance_bot)
+      mp_instance_bot->OnPlayerLeave(player);
 
     // this may be called during Map::Update
     // after decrement+unlink, ++m_mapRefIter will continue correctly
@@ -1681,6 +1694,41 @@ void Map::CreateInstanceData(bool load)
         DEBUG_LOG("New instance data, \"%s\" ,initialized!", sScriptDevAIMgr.GetScriptName(i_script_id));
         i_data->Initialize();
     }
+    /* dungeons =
+    {
+       //Classic Instances
+       {33, sWorld.getConfig(CONFIG_UINT32_SHADOWFANGKEEP_LEVEL) },
+       {34, sWorld.getConfig(CONFIG_UINT32_STOCKADES_LEVEL) },
+       {36, sWorld.getConfig(CONFIG_UINT32_DEADMINES_LEVEL) },
+       {43, sWorld.getConfig(CONFIG_UINT32_WAILINGCAVERNS_LEVEL) },
+       {47, sWorld.getConfig(CONFIG_UINT32_RAZORFENKRAULINSTANCE_LEVEL) },
+       {48, sWorld.getConfig(CONFIG_UINT32_BLACKFATHOM_LEVEL) },
+       {70, sWorld.getConfig(CONFIG_UINT32_ULDAMAN_LEVEL) },
+       {90, sWorld.getConfig(CONFIG_UINT32_GNOMERAGONINSTANCE_LEVEL) },
+       {109, sWorld.getConfig(CONFIG_UINT32_SUNKENTEMPLE_LEVEL) },
+       {129, sWorld.getConfig(CONFIG_UINT32_RAZORFENDOWNS_LEVEL) },
+       {189, sWorld.getConfig(CONFIG_UINT32_MONASTERYINSTANCES_LEVEL) },                  // Scarlet Monastery
+       {209, sWorld.getConfig(CONFIG_UINT32_TANARISINSTANCE_LEVEL) },                     // Zul'Farrak
+       {229, sWorld.getConfig(CONFIG_UINT32_BLACKROCKSPIRE_LEVEL) },
+       {230, sWorld.getConfig(CONFIG_UINT32_BLACKROCKDEPTHS_LEVEL) },
+       {249, sWorld.getConfig(CONFIG_UINT32_ONYXIALAIRINSTANCE_LEVEL) },
+       {289, sWorld.getConfig(CONFIG_UINT32_SCHOOLOFNECROMANCY_LEVEL) },                  // Scholomance
+       {309, sWorld.getConfig(CONFIG_UINT32_ZULGURUB_LEVEL) },
+       {329, sWorld.getConfig(CONFIG_UINT32_STRATHOLME_LEVEL) },
+       {349, sWorld.getConfig(CONFIG_UINT32_MAURADON_LEVEL) },
+       {389, sWorld.getConfig(CONFIG_UINT32_ORGRIMMARINSTANCE_LEVEL) },                   // Ragefire Chasm
+       {409, sWorld.getConfig(CONFIG_UINT32_MOLTENCORE_LEVEL) },
+       {429, sWorld.getConfig(CONFIG_UINT32_DIREMAUL_LEVEL) },
+       {469, sWorld.getConfig(CONFIG_UINT32_BLACKWINGLAIR_LEVEL) },
+       {509, sWorld.getConfig(CONFIG_UINT32_AHNQIRAJ_LEVEL) },                            // Ruins of Ahn'Qiraj
+       {531, sWorld.getConfig(CONFIG_UINT32_AHNQIRAJTEMPLE_LEVEL) },
+       {533, sWorld.getConfig(CONFIG_UINT32_STRATHOLMERAID_LEVEL) },
+    }; */
+
+    std::vector<int32> buffed_zones = {229, 230, 249, 289, 309, 329, 409, 469, 409, 429, 469, 509, 531, 533};
+
+    if (std::find(buffed_zones.begin(), buffed_zones.end(), GetId()) != buffed_zones.end())
+      mp_instance_bot = new instancebot::InstanceBot(this);
 }
 
 void Map::TeleportAllPlayersTo(TeleportLocation loc)
