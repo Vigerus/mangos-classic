@@ -200,6 +200,7 @@ struct boss_onyxiaAI : public CombatAI
         m_creature->SetStandState(UNIT_STAND_STATE_SLEEP);
         m_creature->SetSheath(SHEATH_STATE_MELEE);
         SetMeleeEnabled(true);
+        ResetAllTimers();
     }
 
     void Aggro(Unit* /*who*/) override

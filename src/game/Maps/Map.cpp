@@ -849,6 +849,8 @@ void Map::Update(const uint32& t_diff)
             {
                 activePlayers++;
             }
+#else
+            hasRealPlayers = true;
 #endif
 
             plr->Update(t_diff);
@@ -967,6 +969,11 @@ void Map::Update(const uint32& t_diff)
                 }
             }
         }
+    }
+
+    if (!hasRealPlayers && IsDungeon() && i_data->IsEncounterInProgress())
+    {
+       i_data->ResetEncounter();
     }
 
     // update all objects

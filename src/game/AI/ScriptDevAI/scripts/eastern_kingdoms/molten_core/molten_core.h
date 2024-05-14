@@ -100,6 +100,7 @@ class instance_molten_core : public ScriptedInstance
         ~instance_molten_core() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
         bool IsEncounterInProgress() const override;
 
         void OnCreatureCreate(Creature* pCreature) override;

@@ -131,6 +131,7 @@ class instance_blackwing_lair : public ScriptedInstance
         ~instance_blackwing_lair() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
         bool IsEncounterInProgress() const override;
 
         void OnCreatureCreate(Creature* pCreature) override;

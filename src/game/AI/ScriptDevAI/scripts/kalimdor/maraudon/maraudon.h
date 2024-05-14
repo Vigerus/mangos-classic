@@ -32,6 +32,7 @@ class instance_maraudon : public ScriptedInstance
         ~instance_maraudon() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnObjectCreate(GameObject* go) override;
         void OnCreatureDeath(Creature* creature) override;

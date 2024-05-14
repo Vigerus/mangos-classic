@@ -38,6 +38,10 @@ struct world_map_eastern_kingdoms : public ScriptedMap
         instance->GetVariableManager().SetVariable(WORLD_STATE_CUSTOM_STV_GRP_02, urand(0, 1));
     }
 
+    void ResetEncounter() override
+    {
+    }
+
     void OnCreatureGroupDespawn(CreatureGroup* creatureGroup, Creature* /*creature*/) override
     {
         switch (creatureGroup->GetGroupEntry().WorldStateCondition)

@@ -120,6 +120,15 @@ void instance_blackrock_spire::Initialize()
     InitializeDialogueHelper(this);
 }
 
+void instance_blackrock_spire::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+}
+
 void instance_blackrock_spire::OnObjectCreate(GameObject* pGo)
 {
     switch (pGo->GetEntry())

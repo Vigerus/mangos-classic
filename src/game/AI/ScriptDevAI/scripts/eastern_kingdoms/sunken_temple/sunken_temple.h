@@ -117,6 +117,7 @@ class instance_sunken_temple : public ScriptedInstance
         ~instance_sunken_temple() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnObjectCreate(GameObject* pGo) override;
         void OnCreatureCreate(Creature* pCreature) override;

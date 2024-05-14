@@ -41,6 +41,7 @@ class instance_uldaman : public ScriptedInstance
         ~instance_uldaman() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnObjectCreate(GameObject* pGo) override;
         void OnCreatureCreate(Creature* pCreature) override;

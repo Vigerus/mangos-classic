@@ -92,6 +92,7 @@ class instance_blackfathom_deeps : public ScriptedInstance
         ~instance_blackfathom_deeps() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnCreatureCreate(Creature* pCreature) override;
         void OnObjectCreate(GameObject* pGo) override;

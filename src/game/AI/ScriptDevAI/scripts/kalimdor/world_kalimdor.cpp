@@ -387,6 +387,15 @@ struct world_map_kalimdor : public ScriptedMap
     }
 
     uint32 GetData(uint32 uiType) const override { return m_encounter[uiType]; }
+
+    void ResetEncounter()
+    {
+        for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+        {
+            if (m_encounter[i] == IN_PROGRESS)
+                m_encounter[i] = NOT_STARTED;
+        }
+    }
 };
 
 InstanceData* GetInstanceData_world_map_kalimdor(Map* pMap)

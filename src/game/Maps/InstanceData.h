@@ -74,6 +74,9 @@ class InstanceData
         // This is to prevent players from entering during boss encounters.
         virtual bool IsEncounterInProgress() const { return false; };
 
+        // This is to reset encounter when all players have left the instance
+        virtual void ResetEncounter() = 0;
+
         // Called when a player successfully enters the instance (after really added to map)
         virtual void OnPlayerEnter(Player*) {}
 

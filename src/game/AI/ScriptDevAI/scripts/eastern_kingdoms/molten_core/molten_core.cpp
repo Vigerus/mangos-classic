@@ -48,6 +48,15 @@ void instance_molten_core::Initialize()
     memset(&m_auiEncounter, 0, sizeof(m_auiEncounter));
 }
 
+void instance_molten_core::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+}
+
 bool instance_molten_core::IsEncounterInProgress() const
 {
     for (uint32 i : m_auiEncounter)

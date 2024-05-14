@@ -55,6 +55,21 @@ void instance_stratholme::Initialize()
     }
 }
 
+void instance_stratholme::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+
+   for (auto& m_uiGateTrapTimer : m_gateTrapTimers)
+   {
+      for (uint8 j = 0; j < 3; ++j)
+         m_uiGateTrapTimer[j] = 0;
+   }
+}
+
 void instance_stratholme::OnPlayerEnter(Player* player)
 {
     // Baron ultimatum succeeded: summon Ysida outside the cage alive

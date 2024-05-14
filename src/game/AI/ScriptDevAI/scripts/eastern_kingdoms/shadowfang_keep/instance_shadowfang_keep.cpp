@@ -62,6 +62,15 @@ void instance_shadowfang_keep::Initialize()
     InitializeDialogueHelper(this);
 }
 
+void instance_shadowfang_keep::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+}
+
 void instance_shadowfang_keep::OnCreatureCreate(Creature* creature)
 {
     switch (creature->GetEntry())

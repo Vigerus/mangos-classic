@@ -73,6 +73,15 @@ void instance_naxxramas::Initialize()
     InitializeDialogueHelper(this);
 }
 
+void instance_naxxramas::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+}
+
 void instance_naxxramas::JustDidDialogueStep(int32 entry)
 {
     switch (entry)

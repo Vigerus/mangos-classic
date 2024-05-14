@@ -227,6 +227,7 @@ class instance_stratholme : public ScriptedInstance
         ~instance_stratholme() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnPlayerEnter(Player* player) override;
 

@@ -85,6 +85,7 @@ class instance_shadowfang_keep : public ScriptedInstance, public DialogueHelper
         instance_shadowfang_keep(Map* map);
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnCreatureCreate(Creature* creature) override;
         void OnCreatureDeath(Creature* creature) override;

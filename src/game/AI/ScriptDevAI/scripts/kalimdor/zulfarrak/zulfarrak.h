@@ -51,6 +51,7 @@ class instance_zulfarrak : public ScriptedInstance
         ~instance_zulfarrak() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnCreatureEnterCombat(Creature* pCreature) override;
         void OnCreatureEvade(Creature* pCreature) override;

@@ -58,6 +58,7 @@ class instance_gnomeregan : public ScriptedInstance
         ~instance_gnomeregan() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnCreatureCreate(Creature* pCreature) override;
         void OnObjectCreate(GameObject* pGo) override;

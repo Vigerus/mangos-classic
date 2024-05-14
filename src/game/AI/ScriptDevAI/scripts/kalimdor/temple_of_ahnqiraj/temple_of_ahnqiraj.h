@@ -101,6 +101,7 @@ class instance_temple_of_ahnqiraj : public ScriptedInstance, private DialogueHel
         ~instance_temple_of_ahnqiraj() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         bool IsEncounterInProgress() const override;
 

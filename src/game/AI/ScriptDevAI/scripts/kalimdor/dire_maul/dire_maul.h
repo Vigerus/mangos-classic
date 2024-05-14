@@ -130,6 +130,7 @@ class instance_dire_maul : public ScriptedInstance
         ~instance_dire_maul() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnPlayerEnter(Player* pPlayer) override;
         void OnPlayerLeave(Player* pPlayer) override;

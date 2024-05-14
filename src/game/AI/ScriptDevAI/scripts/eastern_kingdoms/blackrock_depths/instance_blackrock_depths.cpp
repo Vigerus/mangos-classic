@@ -50,6 +50,15 @@ void instance_blackrock_depths::Initialize()
     memset(&m_auiEncounter, 0, sizeof(m_auiEncounter));
 }
 
+void instance_blackrock_depths::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+}
+
 void instance_blackrock_depths::OnCreatureCreate(Creature* pCreature)
 {
     switch (pCreature->GetEntry())

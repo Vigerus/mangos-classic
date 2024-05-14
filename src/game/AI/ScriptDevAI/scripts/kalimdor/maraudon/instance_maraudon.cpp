@@ -37,6 +37,15 @@ void instance_maraudon::Initialize()
     memset(&m_encounter, 0, sizeof(m_encounter));
 }
 
+void instance_maraudon::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_encounter[i] == IN_PROGRESS)
+         m_encounter[i] = NOT_STARTED;
+   }
+}
+
 void instance_maraudon::OnObjectCreate(GameObject* go)
 {
     switch (go->GetEntry())

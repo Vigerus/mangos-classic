@@ -23,6 +23,7 @@ class instance_razorfen_kraul : public ScriptedInstance
         ~instance_razorfen_kraul() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnObjectCreate(GameObject* pGo) override;
         void OnCreatureCreate(Creature* pCreature) override;

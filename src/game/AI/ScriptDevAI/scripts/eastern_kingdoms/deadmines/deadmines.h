@@ -45,6 +45,7 @@ class instance_deadmines : public ScriptedInstance
         instance_deadmines(Map* pMap);
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnPlayerEnter(Player* pPlayer) override;
 

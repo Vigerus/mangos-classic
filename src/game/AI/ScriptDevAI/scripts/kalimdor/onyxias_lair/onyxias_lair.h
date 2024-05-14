@@ -28,6 +28,7 @@ class instance_onyxias_lair : public ScriptedInstance
         void Initialize() override;
 
         bool IsEncounterInProgress() const override;
+        void ResetEncounter() override;
 
         void OnCreatureCreate(Creature* pCreature) override;
         void OnCreatureDeath(Creature* pCreature) override;

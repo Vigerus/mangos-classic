@@ -42,6 +42,11 @@ bool instance_onyxias_lair::IsEncounterInProgress() const
     return m_uiEncounter == IN_PROGRESS || m_uiEncounter >= DATA_LIFTOFF;
 }
 
+void instance_onyxias_lair::ResetEncounter()
+{
+   m_uiEncounter = NOT_STARTED;
+}
+
 void instance_onyxias_lair::OnCreatureCreate(Creature* pCreature)
 {
     switch (pCreature->GetEntry())

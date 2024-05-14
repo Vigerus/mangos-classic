@@ -42,6 +42,15 @@ void instance_gnomeregan::Initialize()
     }
 }
 
+void instance_gnomeregan::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+}
+
 void instance_gnomeregan::OnCreatureCreate(Creature* pCreature)
 {
     if (pCreature->GetEntry() == NPC_BLASTMASTER_SHORTFUSE)

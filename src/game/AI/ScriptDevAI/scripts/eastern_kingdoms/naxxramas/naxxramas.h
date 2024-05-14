@@ -261,6 +261,7 @@ class instance_naxxramas : public ScriptedInstance, private DialogueHelper
         ~instance_naxxramas() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         bool IsEncounterInProgress() const override;
 

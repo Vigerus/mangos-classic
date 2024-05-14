@@ -44,6 +44,15 @@ void instance_blackfathom_deeps::Initialize()
     memset(&m_uiSpawnMobsTimer, 0, sizeof(m_uiSpawnMobsTimer));
 }
 
+void instance_blackfathom_deeps::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+}
+
 void instance_blackfathom_deeps::OnCreatureCreate(Creature* pCreature)
 {
     if (pCreature->GetEntry() == NPC_KELRIS)

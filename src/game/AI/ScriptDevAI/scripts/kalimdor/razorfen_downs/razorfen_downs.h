@@ -46,6 +46,7 @@ class instance_razorfen_downs : public ScriptedInstance
         ~instance_razorfen_downs() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnCreatureCreate(Creature* pCreature) override;
         void OnObjectCreate(GameObject* pGo) override;

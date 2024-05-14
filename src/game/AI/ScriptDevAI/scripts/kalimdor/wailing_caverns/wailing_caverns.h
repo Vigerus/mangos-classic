@@ -33,6 +33,7 @@ class instance_wailing_caverns : public ScriptedInstance
         ~instance_wailing_caverns() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnPlayerEnter(Player* pPlayer) override;
         void OnCreatureCreate(Creature* pCreature) override;

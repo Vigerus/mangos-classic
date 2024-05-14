@@ -81,6 +81,7 @@ struct boss_razorgoreAI : public CombatAI
     {
         CombatAI::Reset();
         SetDeathPrevention(true);
+        ResetAllTimers();
 
         DoCastSpellIfCan(nullptr, SPELL_DOUBLE_ATTACK, CAST_AURA_NOT_PRESENT | CAST_TRIGGERED);
     }

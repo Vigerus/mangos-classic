@@ -137,6 +137,7 @@ class instance_scholomance : public ScriptedInstance
         ~instance_scholomance() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnCreatureEnterCombat(Creature* pCreature) override;
         void OnCreatureEvade(Creature* pCreature) override;

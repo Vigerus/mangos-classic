@@ -104,6 +104,7 @@ class instance_ruins_of_ahnqiraj : public ScriptedInstance
         ~instance_ruins_of_ahnqiraj() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         // bool IsEncounterInProgress() const override;              // not active in AQ20
 

@@ -44,6 +44,7 @@ class instance_scarlet_monastery : public ScriptedInstance
         instance_scarlet_monastery(Map* pMap);
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnCreatureCreate(Creature* pCreature) override;
         void OnCreatureDeath(Creature* pCreature) override;

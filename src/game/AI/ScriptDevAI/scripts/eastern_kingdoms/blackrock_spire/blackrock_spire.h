@@ -154,6 +154,7 @@ class instance_blackrock_spire : public ScriptedInstance, private DialogueHelper
         ~instance_blackrock_spire() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
 
         void OnObjectCreate(GameObject* pGo) override;
         void OnCreatureCreate(Creature* pCreature) override;

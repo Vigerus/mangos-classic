@@ -52,6 +52,7 @@ class instance_zulgurub : public ScriptedInstance
         ~instance_zulgurub() {}
 
         void Initialize() override;
+        void ResetEncounter() override;
         // IsEncounterInProgress() const override { return false; }  // not active in Zul'Gurub
 
         void OnCreatureCreate(Creature* creature) override;

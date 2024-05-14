@@ -55,6 +55,15 @@ void instance_temple_of_ahnqiraj::Initialize()
     InitializeDialogueHelper(this);
 }
 
+void instance_temple_of_ahnqiraj::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+}
+
 bool instance_temple_of_ahnqiraj::IsEncounterInProgress() const
 {
     for (uint32 i : m_auiEncounter)

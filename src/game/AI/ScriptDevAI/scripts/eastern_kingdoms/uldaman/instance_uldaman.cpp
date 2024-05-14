@@ -39,6 +39,15 @@ void instance_uldaman::Initialize()
     instance->GetVariableManager().SetVariable(WORLD_STATE_CUSTOM_SPAWN_ANNORA, 0);
 }
 
+void instance_uldaman::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+}
+
 void instance_uldaman::OnObjectCreate(GameObject* pGo)
 {
     switch (pGo->GetEntry())

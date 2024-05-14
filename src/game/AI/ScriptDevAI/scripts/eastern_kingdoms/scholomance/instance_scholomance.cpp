@@ -43,6 +43,15 @@ void instance_scholomance::Initialize()
         m_mGandlingData[aGandlingEvent] = GandlingEventData();
 }
 
+void instance_scholomance::ResetEncounter()
+{
+   for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
+   {
+      if (m_auiEncounter[i] == IN_PROGRESS)
+         m_auiEncounter[i] = NOT_STARTED;
+   }
+}
+
 void instance_scholomance::OnPlayerEnter(Player* pPlayer)
 {
     // Summon Gandling if can
