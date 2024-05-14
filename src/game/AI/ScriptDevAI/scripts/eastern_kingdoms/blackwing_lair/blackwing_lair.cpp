@@ -57,6 +57,7 @@ bool instance_blackwing_lair::IsEncounterInProgress() const
 
 void instance_blackwing_lair::OnCreatureCreate(Creature* pCreature)
 {
+    sLog.outBasic("Creature Created: %s.", pCreature->GetName());
     switch (pCreature->GetEntry())
     {
         case NPC_MONSTER_GENERATOR:
@@ -418,10 +419,13 @@ void instance_blackwing_lair::OnCreatureDeath(Creature* pCreature)
 
 void instance_blackwing_lair::OnCreatureRespawn(Creature* creature)
 {
+    sLog.outBasic("Creature Respawned: %s.", creature->GetName());
+
     if (creature->GetSpawnerGuid().GetEntry() == NPC_MONSTER_GENERATOR)
     {
         creature->SetNoLoot(true);
         creature->SetCorpseDelay(5);
+        creature->SetInCombatWithZone();
         return;
     }
 

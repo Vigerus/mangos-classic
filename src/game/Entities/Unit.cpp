@@ -7895,6 +7895,7 @@ void Unit::SetInCombatState(bool PvP, Unit* enemy)
 
 void Unit::EngageInCombatWith(Unit* enemy)
 {
+    sLog.outBasic("%s engages combat with %s.", GetName(), enemy->GetName());
     MANGOS_ASSERT(enemy);
     AddThreat(enemy);
     SetInCombatWith(enemy);
