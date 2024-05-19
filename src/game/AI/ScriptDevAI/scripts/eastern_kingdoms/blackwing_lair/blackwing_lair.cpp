@@ -145,7 +145,10 @@ void instance_blackwing_lair::OnObjectCreate(GameObject* pGo)
         case GO_SUPPRESSION_DEVICE:
             // Do not spawn the Suppression Device GOs if Broodlord Lashlayer is dead
             if (GetData(TYPE_LASHLAYER) == DONE)
-                pGo->SetLootState(GO_JUST_DEACTIVATED);
+            {
+                pGo->Delete();
+                //pGo->SetLootState(GO_JUST_DEACTIVATED);
+            }
             return;
 
         default:
