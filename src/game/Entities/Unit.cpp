@@ -50,6 +50,7 @@
 #include "Tools/Formulas.h"
 #include "Entities/Transports.h"
 #include "Anticheat/Anticheat.hpp"
+#include "Log/LogHelper.h"
 
 #ifdef BUILD_METRICS
  #include "Metric/Metric.h"
@@ -7895,7 +7896,8 @@ void Unit::SetInCombatState(bool PvP, Unit* enemy)
 
 void Unit::EngageInCombatWith(Unit* enemy)
 {
-    sLog.outBasic("%s engages combat with %s.", GetName(), enemy->GetName());
+    CCLOG_TRACE(m_logger) << GetName() << " engages combat with " << enemy->GetName();
+
     MANGOS_ASSERT(enemy);
     AddThreat(enemy);
     SetInCombatWith(enemy);

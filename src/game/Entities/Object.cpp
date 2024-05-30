@@ -45,7 +45,8 @@
 #include "Spells/SpellMgr.h"
 #include "MotionGenerators/PathFinder.h"
 
-Object::Object(): m_updateFlag(0), m_itsNewObject(false), m_dbGuid(0)
+Object::Object() :
+    m_logger(log4cxx::Logger::getLogger("Object"))
 {
     m_objectTypeId      = TYPEID_OBJECT;
     m_objectType        = TYPEMASK_OBJECT;

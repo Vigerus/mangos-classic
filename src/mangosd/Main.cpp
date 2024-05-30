@@ -30,6 +30,12 @@
 #include "AuctionHouseBot/AuctionHouseBot.h"
 #include "PlayerBot/config.h"
 
+#include <log4cxx/logger.h>
+#include <log4cxx/basicconfigurator.h>
+#include <log4cxx/propertyconfigurator.h>
+#include <log4cxx/helpers/exception.h>
+#include "log4cxx/propertyconfigurator.h"
+
 #include <openssl/opensslv.h>
 #include <openssl/crypto.h>
 #if defined(OPENSSL_VERSION_MAJOR) && (OPENSSL_VERSION_MAJOR >= 3)
@@ -68,6 +74,16 @@ uint32 realmID;                                             ///< Id of the realm
 /// Launch the mangos server
 int main(int argc, char* argv[])
 {
+    try
+    {
+       log4cxx::PropertyConfigurator::configure("logging/mangos.properties");
+    }
+    catch (log4cxx::helpers::Exception&)
+    {
+        std::cout << "logger reading configuration failure!\n";
+    }
+
+
     std::string auctionBotConfig, configFile, playerBotConfig, serviceParameter;
 
     boost::program_options::options_description desc("Allowed options");

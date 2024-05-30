@@ -34,6 +34,11 @@
 #include "Grids/Cell.h"
 #include "Utilities/EventProcessor.h"
 
+#include <log4cxx/logger.h>
+#include <log4cxx/basicconfigurator.h>
+#include <log4cxx/propertyconfigurator.h>
+#include <log4cxx/helpers/exception.h>
+
 #include <set>
 
 enum TempSpawnType
@@ -621,6 +626,8 @@ class Object
         inline bool IsCorpse() const { return GetTypeId() == TYPEID_CORPSE; }
 
     protected:
+       log4cxx::LoggerPtr m_logger;
+
         Object();
 
         void _InitValues();
@@ -637,7 +644,7 @@ class Object
         uint16 m_objectType;
 
         uint8 m_objectTypeId;
-        uint8 m_updateFlag;
+        uint8 m_updateFlag = 0;
 
         union
         {
@@ -654,14 +661,14 @@ class Object
 
     private:
         bool m_inWorld;
-        bool m_itsNewObject;
+        bool m_itsNewObject = false;
 
         PackedGuid m_PackGUID;
 
         Object(const Object&);                              // prevent generation copy constructor
         Object& operator=(Object const&);                   // prevent generation assigment operator
 
-        uint32 m_dbGuid;
+        uint32 m_dbGuid = 0;
 
     public:
         // for output helpfull error messages from ASSERTs
