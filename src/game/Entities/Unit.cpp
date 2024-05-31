@@ -7896,7 +7896,7 @@ void Unit::SetInCombatState(bool PvP, Unit* enemy)
 
 void Unit::EngageInCombatWith(Unit* enemy)
 {
-    CCLOG_TRACE(m_logger) << GetName() << " engages combat with " << enemy->GetName();
+    CCLOG_TRACE(m_logger) << "Source:[SYSTEM] " << GetName() << " engages combat with " << enemy->GetName();
 
     MANGOS_ASSERT(enemy);
     AddThreat(enemy);
