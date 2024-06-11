@@ -29,7 +29,7 @@ if(BUILD_PLAYERBOTS)
     PlayerBots
     SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/modules/PlayerBots"
     GIT_REPOSITORY "https://github.com/Vigerus/playerbots.git"
-    GIT_TAG "master"
+    GIT_TAG "viger_server"
   )
 
   FetchContent_GetProperties(PlayerBots)
