@@ -6282,15 +6282,25 @@ int32 Player::CalculateReputationGain(ReputationSource source, int32 rep, int32 
 
     uint32 currentLevel = GetLevel();
 
-    if (MaNGOS::XP::IsTrivialLevelDifference(currentLevel, creatureOrQuestLevel))
-        percent *= minRate;
-    else
+    // Level zero seems to be treated as always equal to players current level in IsTrivialLevelDifference therefore I have skipped level difference penalty computations for that value
+    if (creatureOrQuestLevel > 0)
     {
-        // Pre-3.0.8: Declines with 20% for each level if 6 levels or more below the player down to a minimum (default: 20%)
-        const uint32 treshold = (creatureOrQuestLevel + 5);
+        if (source == REPUTATION_SOURCE_KILL)
+        {
+            if (MaNGOS::XP::IsTrivialLevelDifference(currentLevel, creatureOrQuestLevel))
+            {
+                const uint32 greenRange = MaNGOS::XP::GetQuestGreenRange(currentLevel);
+                percent *= std::max(minRate, (1.0f - (0.2f * (currentLevel - greenRange - creatureOrQuestLevel))));
+            }
+        }
+        else if (source == REPUTATION_SOURCE_QUEST)
+        {
+            // Pre-3.0.8: Declines with 20% for each level if 6 levels or more below the player down to a minimum (default: 20%)
+            const uint32 treshold = (creatureOrQuestLevel + 5);
 
-        if (currentLevel > treshold)
-            percent *= std::max(minRate, (1.0f - (0.2f * (currentLevel - treshold))));
+            if (currentLevel > treshold)
+                percent *= std::max(minRate, (1.0f - (0.2f * (currentLevel - treshold))));
+        }
     }
 
     if (percent <= 0.0f)
@@ -6603,7 +6613,7 @@ bool Player::RewardHonor(Unit* uVictim, uint32 groupsize)
         if (GetTeam() == pVictim->GetTeam())
             return false;
 
-        if (GetLevel() < (pVictim->GetLevel() + 5))
+        if (!MaNGOS::XP::IsTrivialLevelDifference(GetLevel(), pVictim->GetLevel()))
         {
             AddHonorCP(MaNGOS::Honor::HonorableKillPoints(this, pVictim, groupsize), HONORABLE, pVictim);
             return true;
@@ -11409,7 +11419,6 @@ void Player::SendNewItem(Item* item, uint32 count, bool received, bool created, 
     if (!item)                                              // prevent crash
         return;
 
-    // last check 2.0.10
     WorldPacket data(SMSG_ITEM_PUSH_RESULT, (8 + 4 + 4 + 4 + 1 + 4 + 4 + 4 + 4 + 4));
     data << GetObjectGuid();                                // player GUID
     data << uint32(received);                               // 0=looted, 1=from npc
@@ -11420,9 +11429,8 @@ void Player::SendNewItem(Item* item, uint32 count, bool received, bool created, 
     data << uint32((item->GetCount() == count) ? item->GetSlot() : -1);
     data << uint32(item->GetEntry());                       // item id
     data << uint32(item->GetItemSuffixFactor());            // SuffixFactor
-    data << uint32(item->GetItemRandomPropertyId());        // random item property id
+    data << int32(item->GetItemRandomPropertyId());         // random item property id
     data << uint32(count);                                  // count of items
-    data << uint32(GetItemCount(item->GetEntry()));         // count of items in inventory
 
     if (broadcast && GetGroup())
         GetGroup()->BroadcastPacket(data, true);
@@ -12023,7 +12031,8 @@ void Player::SendPreparedQuest(ObjectGuid guid) const
     else
         type = QUESTGIVER_GAMEOBJECT;
 
-    if (QuestgiverGreeting const* data = sObjectMgr.GetQuestgiverGreetingData(guid.GetEntry(), type))
+    QuestgiverGreeting const* data = sObjectMgr.GetQuestgiverGreetingData(guid.GetEntry(), type);
+    if (data && (questMenu.MenuItemCount() > 1 || sWorld.getConfig(CONFIG_BOOL_ALWAYS_SHOW_QUEST_GREETING)))
     {
         QEmote qe;
         qe._Delay = data->emoteDelay;
@@ -13840,14 +13849,13 @@ void Player::SendQuestConfirmAccept(const Quest* pQuest, Player* pReceiver) cons
     }
 }
 
-void Player::SendPushToPartyResponse(Player* pPlayer, uint32 msg) const
+void Player::SendPushToPartyResponse(Player* pPlayer, QuestShareMessages msg) const
 {
     if (pPlayer)
     {
-        WorldPacket data(MSG_QUEST_PUSH_RESULT, (8 + 4 + 1));
+        WorldPacket data(MSG_QUEST_PUSH_RESULT, 8 + 1);
         data << pPlayer->GetObjectGuid();
-        data << uint32(msg);                                // valid values: 0-8
-        data << uint8(0);
+        data << uint8(msg);
         GetSession()->SendPacket(data);
         DEBUG_LOG("WORLD: Sent MSG_QUEST_PUSH_RESULT");
     }
@@ -14213,7 +14221,10 @@ bool Player::LoadFromDB(ObjectGuid guid, SqlQueryHolder* holder)
         {
             GameObjectInfo const* transportInfo = sGOStorage.LookupEntry<GameObjectInfo>(data->id);
             if (transportInfo->type == GAMEOBJECT_TYPE_TRANSPORT)
+            {
                 guid = ObjectGuid(HIGHGUID_GAMEOBJECT, data->id, transGUID);
+                m_movementInfo.t_guid = guid;
+            }
         }
         GenericTransport* transport = GetMap()->GetTransport(guid);
         Map* map = GetMap();
@@ -18080,10 +18091,10 @@ void Player::SendTransferAbortedByLockStatus(MapEntry const* mapEntry, AreaTrigg
             GetSession()->SendAreaTriggerMessage(GetSession()->GetMangosString(LANG_LEVEL_MINREQUIRED), miscRequirement);
             break;
         case AREA_LOCKSTATUS_ZONE_IN_COMBAT:
-            GetSession()->SendTransferAborted(mapEntry->MapID, TRANSFER_ABORT_ZONE_IN_COMBAT);
+            GetSession()->SendTransferAborted(TRANSFER_ABORT_ZONE_IN_COMBAT);
             break;
         case AREA_LOCKSTATUS_INSTANCE_IS_FULL:
-            GetSession()->SendTransferAborted(mapEntry->MapID, TRANSFER_ABORT_MAX_PLAYERS);
+            GetSession()->SendTransferAborted(TRANSFER_ABORT_MAX_PLAYERS);
             break;
         case AREA_LOCKSTATUS_QUEST_NOT_COMPLETED:
             if (mapEntry->IsContinent())               // do not report anything for quest areatrigge
@@ -18098,7 +18109,7 @@ void Player::SendTransferAbortedByLockStatus(MapEntry const* mapEntry, AreaTrigg
                 GetSession()->SendAreaTriggerMessage(GetSession()->GetMangosString(LANG_LEVEL_MINREQUIRED_AND_ITEM), at->requiredLevel, sObjectMgr.GetItemPrototype(miscRequirement)->Name1);
             break;
         case AREA_LOCKSTATUS_TOO_MANY_INSTANCE:
-            GetSession()->SendTransferAborted(mapEntry->MapID, TRANSFER_ABORT_TOO_MANY_INSTANCES);
+            GetSession()->SendTransferAborted(TRANSFER_ABORT_TOO_MANY_INSTANCES);
             break;
         case AREA_LOCKSTATUS_NOT_ALLOWED:
         case AREA_LOCKSTATUS_RAID_LOCKED:

@@ -88,6 +88,19 @@ void GossipMenu::AddMenuItem(uint8 Icon, int32 itemText, uint32 dtSender, uint32
     AddMenuItem(Icon, std::string(item_text), dtSender, dtAction, std::string(box_text), Coded);
 }
 
+void GossipMenu::AddMenuItemBct(uint8 Icon, int32 itemText, Gender gender, uint32 dtSender, uint32 dtAction, int32 boxText, bool Coded)
+{
+    uint32 loc_idx = m_session->GetSessionDbLocaleIndex();
+
+    BroadcastText const* bctOption = sObjectMgr.GetBroadcastText(itemText);
+    MANGOS_ASSERT(bctOption); // should never be null
+    std::string const& strOptionText = bctOption->GetText(loc_idx, gender);
+
+    BroadcastText const* bctBox = sObjectMgr.GetBroadcastText(boxText);
+
+    AddMenuItem(Icon, strOptionText, dtSender, dtAction, bctBox != nullptr ? bctBox->GetText(loc_idx, gender) : "", Coded);
+}
+
 uint32 GossipMenu::MenuItemSender(unsigned int ItemId)
 {
     if (ItemId >= m_gItems.size())
@@ -529,13 +542,13 @@ void PlayerMenu::SendQuestGiverRequestItems(Quest const* pQuest, ObjectGuid npcG
 
     if (Completable)
     {
-        data << pQuest->GetCompleteEmoteDelay();
-        data << pQuest->GetCompleteEmote();
+        data << int32(pQuest->GetCompleteEmoteDelay());
+        data << uint32(pQuest->GetCompleteEmote());
     }
     else
     {
-        data << pQuest->GetIncompleteEmoteDelay();
-        data << pQuest->GetIncompleteEmote();
+        data << int32(pQuest->GetIncompleteEmoteDelay());
+        data << uint32(pQuest->GetIncompleteEmote());
     }
 
     // Close Window after cancel
@@ -559,16 +572,15 @@ void PlayerMenu::SendQuestGiverRequestItems(Quest const* pQuest, ObjectGuid npcG
             data << uint32(0);
     }
 
-    data << uint32(0x02);
+    data << uint32(0x02);                                   // flags1
 
     if (!Completable)                                       // Completable = flags1 && flags2 && flags3 && flags4
-        data << uint32(0x00);                               // flags1
+        data << uint32(0x00);                               // flags2
     else
-        data << uint32(0x03);
+        data << uint32(0x03);                               // flags2
 
-    data << uint32(0x04);                                   // flags2
-    data << uint32(0x08);                                   // flags3
-    data << uint32(0x10);                                   // flags4
+    data << uint32(0x04);                                   // flags3
+    data << uint32(0x08);                                   // flags4
 
     GetMenuSession()->SendPacket(data);
     DEBUG_LOG("WORLD: Sent SMSG_QUESTGIVER_REQUEST_ITEMS NPCGuid = %s, questid = %u", npcGUID.GetString().c_str(), pQuest->GetQuestId());
