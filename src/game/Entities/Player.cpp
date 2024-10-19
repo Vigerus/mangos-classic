@@ -61,6 +61,7 @@
 #include "Loot/LootMgr.h"
 #include "World/WorldState.h"
 #include "Anticheat/Anticheat.hpp"
+#include "GameEvents/GlobalEventSubsystem.h"
 
 #ifdef BUILD_DEPRECATED_PLAYERBOT
 #include "PlayerBot/Base/PlayerbotAI.h"
@@ -9841,6 +9842,8 @@ Item* Player::StoreNewItem(ItemPosCountVec const& dest, uint32 item, bool update
     {
         ItemAddedQuestCheck(item, count);
         pItem = StoreItem(dest, pItem, update);
+
+        GlobalEventSubsystem::instance().GetOnItemCreatedDelegate().Broadcast(this, item);
     }
     return pItem;
 }

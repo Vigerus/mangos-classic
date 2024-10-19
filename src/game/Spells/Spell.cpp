@@ -46,6 +46,7 @@
 #include "MotionGenerators/PathFinder.h"
 #include "Spells/Scripts/SpellScript.h"
 #include "Entities/ObjectGuid.h"
+#include "GameEvents/GlobalEventSubsystem.h"
 
 #ifdef ENABLE_PLAYERBOTS
 #include "playerbot/PlayerbotAI.h"
@@ -1457,6 +1458,8 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask, TargetInfo* target, 
     // now apply all created auras
     if (m_spellAuraHolder)
     {
+        uint32 spellId = m_spellAuraHolder->GetId();
+
         // normally shouldn't happen
         if (!m_spellAuraHolder->IsEmptyHolder())
         {
@@ -1493,6 +1496,8 @@ void Spell::DoSpellHitOnUnit(Unit* unit, uint32 effectMask, TargetInfo* target, 
                 delete m_spellAuraHolder;
                 m_spellAuraHolder = nullptr;
             }
+
+            GlobalEventSubsystem::instance().GetOnAuraAppliedDelegate().Broadcast(unit, spellId);
         }
         else
         {
