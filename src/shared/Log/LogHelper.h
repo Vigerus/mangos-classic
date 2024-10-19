@@ -5,6 +5,8 @@
 #include <log4cxx/propertyconfigurator.h>
 #include <log4cxx/helpers/exception.h>
 
+#pragma comment(lib, "log4cxx.lib")
+
 namespace Mangos
 {
    using namespace log4cxx;
@@ -24,13 +26,23 @@ namespace Mangos
          m_line(line),
          m_function(function)
       {
+         size_t pos = m_file.find_last_of("/\\");
+
+         if (pos != std::string::npos)
+         {
+            m_shortfile = m_file.substr(pos + 1);
+         }
+         else
+         {
+            m_shortfile = m_file;
+         }
       }
 
       ~LogWriter()
       {
          if (LOG4CXX_UNLIKELY(((*m_logger).*m_fct_enabled)()))
          {
-            ::log4cxx::spi::LocationInfo locationInfo(m_file, m_function, m_line);
+            ::log4cxx::spi::LocationInfo locationInfo(m_file.c_str(), m_shortfile.c_str(), m_function.c_str(), m_line);
             m_logger->forcedLog(m_fct_getlevel(), oss_.str(oss_), locationInfo);
          }
       }
@@ -47,9 +59,10 @@ namespace Mangos
       Fct_Enabled m_fct_enabled;
       Fct_GetLevel m_fct_getlevel;
 
-      const char* m_file;
+      std::string m_file;
+      std::string m_shortfile;
       int m_line;
-      const char* m_function;
+      std::string m_function;
 
       ::log4cxx::helpers::MessageBuffer oss_;
    };

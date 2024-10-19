@@ -30,11 +30,7 @@
 #include "AuctionHouseBot/AuctionHouseBot.h"
 #include "PlayerBot/config.h"
 
-#include <log4cxx/logger.h>
-#include <log4cxx/basicconfigurator.h>
-#include <log4cxx/propertyconfigurator.h>
-#include <log4cxx/helpers/exception.h>
-#include "log4cxx/propertyconfigurator.h"
+#include "Log/LogHelper.h"
 
 #include <openssl/opensslv.h>
 #include <openssl/crypto.h>

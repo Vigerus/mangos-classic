@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets">
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros">
+    <Log4cxxDir>D:\progs\libs\log4cxx\src\main\</Log4cxxDir>
+    <Log4cxxInc>$(Log4cxxDir)\include</Log4cxxInc>
+    <Log4cxxLib>$(Log4cxxDir)\cpp\Release\</Log4cxxLib>
+  </PropertyGroup>
+  <PropertyGroup>
+    <_ProjectFileVersion>11.0.50727.1</_ProjectFileVersion>
+    <_PropertySheetDisplayName>Log4cxx paths</_PropertySheetDisplayName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(Log4cxxInc);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(Log4cxxLib);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <BuildMacro Include="Log4cxxDir">
+      <Value>$(Log4cxxDir)</Value>
+    </BuildMacro>
+    <BuildMacro Include="Log4cxxInc">
+      <Value>$(Log4cxxInc)</Value>
+    </BuildMacro>
+    <BuildMacro Include="Log4cxxLib">
+      <Value>$(Log4cxxLib)</Value>
+    </BuildMacro>
+  </ItemGroup>
+</Project>
