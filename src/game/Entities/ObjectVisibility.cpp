@@ -157,7 +157,7 @@ void VisibilityData::SetStealthMask(uint32 index, bool apply)
 float VisibilityData::GetStealthVisibilityDistance(Unit const* target, bool alert) const
 {
     // Starting points
-    int32 detectionValue = 30;
+    int32 detectionValue = 0;
 
     // Level difference: 5 point / level, starting from level 1.
     // There may be spells for this and the starting points too, but
