@@ -162,6 +162,7 @@ World::~World()
     MMAP::MMapFactory::clear();
 
     m_lfgQueueThread.join();
+    m_bgQueueThread.join();
 }
 
 /// Cleanups before world stop
@@ -170,7 +171,6 @@ void World::CleanupsBeforeStop()
 #ifdef ENABLE_PLAYERBOTS
     sRandomPlayerbotMgr.LogoutAllBots();
 #endif
-
     KickAll(true);                                   // save and kick all players
     UpdateSessions(1);                               // real players unload required UpdateSessions call
     sBattleGroundMgr.DeleteAllBattleGrounds();       // unload battleground templates before different singletons destroyed
@@ -559,6 +559,8 @@ void World::LoadConfigSettings(bool reload)
 
     setConfig(CONFIG_BOOL_ALWAYS_SHOW_QUEST_GREETING, "AlwaysShowQuestGreeting", false);
 
+    setConfig(CONFIG_BOOL_ALWAYS_SHOW_QUEST_GREETING, "AlwaysShowQuestGreeting", false);
+
     setConfig(CONFIG_BOOL_TAXI_FLIGHT_CHAT_FIX, "TaxiFlightChatFix", false);
     setConfig(CONFIG_BOOL_LONG_TAXI_PATHS_PERSISTENCE, "LongFlightPathsPersistence", false);
     setConfig(CONFIG_BOOL_ALL_TAXI_PATHS, "AllFlightPaths", false);
@@ -823,8 +825,11 @@ void World::LoadConfigSettings(bool reload)
 
     setConfig(CONFIG_BOOL_MMAP_ENABLED, "mmap.enabled", true);
     std::string ignoreMapIds = sConfig.GetStringDefault("mmap.ignoreMapIds");
+    setConfig(CONFIG_BOOL_PRELOAD_MMAP_TILES, "mmap.preload", false);
     MMAP::MMapFactory::preventPathfindingOnMaps(ignoreMapIds.c_str());
-    sLog.outString("WORLD: MMap pathfinding %sabled", getConfig(CONFIG_BOOL_MMAP_ENABLED) ? "en" : "dis");
+    bool enabledPathfinding = getConfig(CONFIG_BOOL_MMAP_ENABLED);
+    sLog.outString("WORLD: MMap pathfinding %sabled", enabledPathfinding ? "en" : "dis");
+    MMAP::MMapFactory::createOrGetMMapManager()->SetEnabled(enabledPathfinding);
 
     setConfig(CONFIG_BOOL_PATH_FIND_OPTIMIZE, "PathFinder.OptimizePath", true);
     setConfig(CONFIG_BOOL_PATH_FIND_NORMALIZE_Z, "PathFinder.NormalizeZ", false);
@@ -896,6 +901,16 @@ void World::SetInitialWorldSettings()
     DetectDBCLang();
     sObjectMgr.SetDbc2StorageLocaleIndex(GetDefaultDbcLocale());    // Get once for all the locale index of DBC language (console/broadcasts)
 
+    if (VMAP::IVMapManager* vmmgr2 = VMAP::VMapFactory::createOrGetVMapManager()) // after map store init
+    {
+        std::vector<uint32> mapIds;
+        for (uint32 mapId = 0; mapId < sMapStore.GetNumRows(); mapId++)
+            if (sMapStore.LookupEntry(mapId))
+                mapIds.push_back(mapId);
+
+        vmmgr2->InitializeThreadUnsafe(mapIds);
+    }
+
     // Loading cameras for characters creation cinematic
     sLog.outString("Loading cinematic...");
     LoadM2Cameras(m_dataPath);
@@ -916,11 +931,11 @@ void World::SetInitialWorldSettings()
     sSpellMgr.LoadSkillRaceClassInfoMap();
 
     ///- Clean up and pack instances
-    sLog.outString("Cleaning up instances...");
-    sMapPersistentStateMgr.CleanupInstances();              // must be called before `creature_respawn`/`gameobject_respawn` tables
-
     sLog.outString("Packing instances...");
     sMapPersistentStateMgr.PackInstances();
+
+    sLog.outString("Cleaning up instances...");
+    sMapPersistentStateMgr.CleanupInstances();              // must be called before `creature_respawn`/`gameobject_respawn` tables and after pack instances
 
     sLog.outString("Packing groups...");
     sObjectMgr.PackGroupIds();                              // must be after CleanupInstances
@@ -934,7 +949,7 @@ void World::SetInitialWorldSettings()
 
     sLog.outString("Loading Game Object Templates...");     // must be after LoadPageTexts
     std::vector<uint32> transportDisplayIds = sObjectMgr.LoadGameobjectInfo();
-    MMAP::MMapFactory::createOrGetMMapManager()->loadAllGameObjectModels(transportDisplayIds);
+    MMAP::MMapFactory::createOrGetMMapManager()->loadAllGameObjectModels(GetDataPath(), transportDisplayIds);
 
     sLog.outString("Loading GameObject models...");
     LoadGameObjectModelList();
@@ -1222,10 +1237,10 @@ void World::SetInitialWorldSettings()
     sObjectMgr.LoadGameObjectForQuests();
 
     sLog.outString("Loading BattleMasters...");
-    sBattleGroundMgr.LoadBattleMastersEntry();
+    sBattleGroundMgr.LoadBattleMastersEntry(false);
 
     sLog.outString("Loading BattleGround event indexes...");
-    sBattleGroundMgr.LoadBattleEventIndexes();
+    sBattleGroundMgr.LoadBattleEventIndexes(false);
 
     sLog.outString("Loading GameTeleports...");
     sObjectMgr.LoadGameTele();
@@ -1412,6 +1427,9 @@ void World::SetInitialWorldSettings()
 
 #ifdef ENABLE_PLAYERBOTS
     sPlayerbotAIConfig.Initialize();
+#ifndef BUILD_AHBOT
+    auctionbot.Init();
+#endif
 #endif
 
     sLog.outString("---------------------------------------");
@@ -2011,14 +2029,6 @@ bool World::RemoveBanAccount(BanMode mode, const std::string& source, const std:
         WarnAccount(account, source, message, "UNBAN");
     }
     return true;
-}
-
-void World::StartLFGQueueThread()
-{
-    m_lfgQueueThread = std::thread([&]()
-    {
-        m_lfgQueue.Update();
-    });
 }
 
 /// Update the game time
@@ -2704,4 +2714,20 @@ void World::LoadWorldSafeLocs() const
 {
     sWorldSafeLocsStore.Load(true);
     sLog.outString(">> Loaded %u world safe locs", sWorldSafeLocsStore.GetRecordCount());
+}
+
+void World::StartLFGQueueThread()
+{
+    m_lfgQueueThread = std::thread([&]()
+    {
+        m_lfgQueue.Update();
+    });
+}
+
+void World::StartBGQueueThread()
+{
+    m_bgQueueThread = std::thread([&]()
+    {
+        m_bgQueue.Update();
+    });
 }
