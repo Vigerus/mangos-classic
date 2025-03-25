@@ -143,7 +143,7 @@ bool Map::CanSpawn(TypeID typeId, uint32 dbGuid)
 {
     if (typeId == TYPEID_UNIT)
         return GetCreatureLinkingHolder()->CanSpawn(dbGuid, this, nullptr, 0.f, 0.f);
-    else if (TYPEID_GAMEOBJECT)
+    else if (typeId == TYPEID_GAMEOBJECT)
         return true;
     return false;
 }
@@ -204,9 +204,13 @@ void Map::Initialize(bool loadInstanceData /*= true*/)
 
     m_spawnManager.Initialize();
 
-    MMAP::MMapFactory::createOrGetMMapManager()->loadMapInstance(sWorld.GetDataPath(), GetId(), GetInstanceId());
-    if (sWorld.getConfig(CONFIG_BOOL_PRELOAD_MMAP_TILES))
-        MMAP::MMapFactory::createOrGetMMapManager()->loadAllMapTiles(sWorld.GetDataPath(), GetId());
+    auto mmap = MMAP::MMapFactory::createOrGetMMapManager();
+    if (mmap->IsEnabled())
+    {
+        MMAP::MMapFactory::createOrGetMMapManager()->loadMapInstance(sWorld.GetDataPath(), GetId(), GetInstanceId());
+        if (sWorld.getConfig(CONFIG_BOOL_PRELOAD_MMAP_TILES))
+            MMAP::MMapFactory::createOrGetMMapManager()->loadAllMapTiles(sWorld.GetDataPath(), GetId());
+    }
 
     sObjectMgr.LoadActiveEntities(this);
 

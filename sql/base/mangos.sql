@@ -23,7 +23,7 @@ DROP TABLE IF EXISTS `db_version`;
 CREATE TABLE `db_version` (
   `version` varchar(120) DEFAULT NULL,
   `creature_ai_version` varchar(120) DEFAULT NULL,
-  `required_z2824_01_mangos_model_unification` bit(1) DEFAULT NULL
+  `required_z2826_01_mangos_spawn_group_squad` bit(1) DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='Used DB version notes';
 
 --
@@ -8810,7 +8810,6 @@ INSERT INTO `playercreateinfo_spell` VALUES
 (2,7,9125,'Generic'),
 (2,7,20573,'Hardiness'),
 (2,7,20574,'Axe Specialization'),
-(2,7,21563,'Command'),
 (2,7,21651,'Opening'),
 (2,7,21652,'Closing'),
 (2,7,22027,'Remove Insignia'),
@@ -10211,6 +10210,7 @@ CREATE TABLE `quest_template` (
   `RewRepValue3` mediumint(9) NOT NULL DEFAULT '0',
   `RewRepValue4` mediumint(9) NOT NULL DEFAULT '0',
   `RewRepValue5` mediumint(9) NOT NULL DEFAULT '0',
+  `ReputationSpilloverMask` tinyint unsigned NOT NULL DEFAULT '0',
   `RewOrReqMoney` int(11) NOT NULL DEFAULT '0',
   `RewMoneyMaxLevel` int(10) unsigned NOT NULL DEFAULT '0',
   `RewSpell` mediumint(8) unsigned NOT NULL DEFAULT '0',
@@ -10532,6 +10532,8 @@ CREATE TABLE `spawn_group`  (
   `WorldStateExpression` int(11) NOT NULL DEFAULT 0 COMMENT 'Worldstate expression Id',
   `Flags` int(10) UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Flags for various behaviour',
   `StringId` INT(11) UNSIGNED NOT NULL DEFAULT '0',
+  `RespawnOverrideMin` INT UNSIGNED COMMENT 'Respawn time override' DEFAULT NULL,
+  `RespawnOverrideMax` INT UNSIGNED COMMENT 'Respawn time override' DEFAULT NULL,
   PRIMARY KEY (`Id`)
 );
 
@@ -10583,6 +10585,19 @@ CREATE TABLE `spawn_group_linked_group`  (
   `Id` int(11) NOT NULL COMMENT 'Spawn Group ID',
   `LinkedId` int(11) NOT NULL COMMENT 'Linked Spawn Group ID',
   PRIMARY KEY (`Id`, `LinkedId`)
+);
+
+-- ----------------------------
+-- Table structure for spawn_group_squad
+-- ----------------------------
+
+DROP TABLE IF EXISTS spawn_group_squad;
+CREATE TABLE spawn_group_squad(
+Id INT NOT NULL COMMENT 'Spawn Group ID',
+SquadId INT NOT NULL COMMENT 'Squad Id within Spawn Group',
+Guid INT NOT NULL COMMENT 'Guid of creature or GO',
+Entry INT NOT NULL COMMENT 'Entry of creature or GO',
+PRIMARY KEY(Id, SquadId, Guid)
 );
 
 --

@@ -838,11 +838,8 @@ void WorldSession::HandlePlayerLogin(LoginQueryHolder* holder)
 
     if (group)
         group->SendUpdateTo(pCurrChar);
-        
-    pCurrChar->GetSocial()->SendFriendList();
-    pCurrChar->GetSocial()->SendIgnoreList();
 
-    pCurrChar->SendInitialPacketsAfterAddToMap();
+    pCurrChar->SendInitialPacketsAfterAddToMap(false);
 
     static SqlStatementID updChars;
     static SqlStatementID updAccount;
@@ -1031,13 +1028,7 @@ void WorldSession::HandlePlayerReconnect()
     if (group)
         group->SendUpdateTo(_player);
 
-    _player->GetSocial()->SendFriendList();
-    _player->GetSocial()->SendIgnoreList();
-
-    _player->SendInitWorldStates(_player->GetZoneId());
-    _player->CastSpell(_player, 836, TRIGGERED_OLD_TRIGGERED);       // LOGINEFFECT
-    _player->SendEnchantmentDurations();                             // must be after add to map
-    _player->SendItemDurations();                                    // must be after add to map
+    _player->SendInitialPacketsAfterAddToMap(true);
 
     // Send friend list online status for other players
     sSocialMgr.SendFriendStatus(_player, FRIEND_ONLINE, _player->GetObjectGuid(), true);
@@ -1058,9 +1049,6 @@ void WorldSession::HandlePlayerReconnect()
     std::string IP_str = GetRemoteAddress();
     sLog.outChar("Account: %d (IP: %s) Login Character:[%s] (guid: %u)",
         GetAccountId(), IP_str.c_str(), _player->GetName(), _player->GetGUIDLow());
-
-    // sync client auras timer
-    _player->UpdateClientAuras();
 
     // sync client control (if taxi flying the client is already sync)
     if (_player->IsTaxiFlying())

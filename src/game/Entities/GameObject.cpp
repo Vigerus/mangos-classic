@@ -686,8 +686,12 @@ void GameObject::Update(const uint32 diff)
             {
                 // since pool system can fail to roll unspawned object, this one can remain spawned, so must set respawn nevertheless
                 if (IsSpawnedByDefault())
-                    if (GameObjectData const* data = sObjectMgr.GetGOData(GetDbGuid()))
+                {
+                    if (GetGameObjectGroup() && GetGameObjectGroup()->IsRespawnOverriden())
+                        m_respawnDelay = GetGameObjectGroup()->GetRandomRespawnTime();
+                    else if (GameObjectData const* data = sObjectMgr.GetGOData(GetDbGuid()))
                         m_respawnDelay = data->GetRandomRespawnTime();
+                }
             }
             else if (m_respawnOverrideOnce)
                 m_respawnOverriden = false;
@@ -1518,7 +1522,7 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
             float radius = float(goInfo->trap.diameter) / 2.0f;
             bool IsBattleGroundTrap = !radius && goInfo->trap.cooldown == 3 && m_respawnTime == 0;
 
-            if (goInfo->trap.spellId == 6636)
+            if (goInfo->trap.spellId == 6636 || goInfo->trap.spellId == 8733)
                 caster = nullptr;
 
             if (goInfo->trap.spellId)
@@ -1555,8 +1559,6 @@ void GameObject::Use(Unit* user, SpellEntry const* spellInfo)
 
             if (user->GetTypeId() != TYPEID_PLAYER)
                 return;
-
-            Player* player = (Player*)user;
 
             // a chair may have n slots. we have to calculate their positions and teleport the player to the nearest one
             float slotX, slotY;

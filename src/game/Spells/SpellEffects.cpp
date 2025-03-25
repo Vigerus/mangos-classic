@@ -281,6 +281,7 @@ void Spell::EffectSchoolDMG(SpellEffectIndex eff_idx)
                     // percent from health with min
                     case 25599:                             // Thundercrash
                     {
+                        m_caster->getThreatManager().modifyThreatPercent(unitTarget, 100);
                         damage = unitTarget->GetHealth() / 2;
                         if (damage < 200)
                             damage = 200;
@@ -1229,12 +1230,6 @@ void Spell::EffectDummy(SpellEffectIndex eff_idx)
 
                     return;
                 }
-                case 26399:                                 // Despawn Tentacles
-                {
-                    if (unitTarget->GetTypeId() == TYPEID_UNIT)
-                        ((Creature*)unitTarget)->ForcedDespawn();
-                    return;
-                }
                 case 26626:                                 // Mana Burn Area
                 {
                     if (unitTarget->GetTypeId() == TYPEID_UNIT && unitTarget->GetPowerType() == POWER_MANA)
@@ -1553,7 +1548,7 @@ void Spell::EffectDummy(SpellEffectIndex eff_idx)
                                         + unitTarget->SpellBaseDamageBonusTaken(GetSpellSchoolMask(m_spellInfo));
                     // Does Amplify Magic/Dampen Magic influence flametongue? If not, the above addition must be removed.
                     float weaponSpeed = float(m_CastItem->GetProto()->Delay) / IN_MILLISECONDS;
-                    bonusDamage = m_caster->SpellBonusWithCoeffs(m_spellInfo, eff_idx, 0, bonusDamage, 0, SPELL_DIRECT_DAMAGE, false); // apply spell coeff
+                    bonusDamage = m_caster->SpellBonusWithCoeffs(m_spellInfo, eff_idx, 0, bonusDamage, 0, false); // apply spell coeff
                     int32 totalDamage = (damage * 0.01 * weaponSpeed) + bonusDamage;
 
                     m_caster->CastCustomSpell(unitTarget, 10444, &totalDamage, nullptr, nullptr, TRIGGERED_OLD_TRIGGERED, m_CastItem);
@@ -1871,7 +1866,7 @@ void Spell::EffectPowerDrain(SpellEffectIndex eff_idx)
         return;
     if (!unitTarget->IsAlive())
         return;
-    if (unitTarget->GetPowerType() != powerType)
+    if (unitTarget->GetPowerType() != powerType && powerType != POWER_HAPPINESS)
         return;
     if (damage < 0)
         return;
@@ -3872,8 +3867,10 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
                 case 18945:
                 case 19633:
                 case 20686:
+                case 22920:
                 case 23382:
                 case 25778:
+                case 30013:
                 case 30121:                                 // Forceful Howl - Plagued Deathhound
                 {
                     // Knock Away variants and derrivatives with scripted threat reduction component
@@ -3888,6 +3885,7 @@ void Spell::EffectScriptEffect(SpellEffectIndex eff_idx)
                         case 25778:
                             pct = -25;
                             break;
+                        case 22920:                                 // Arcane Blast - Prince Tortheldrin 11486
                         case 10101:
                             pct = -100;
                             break;
@@ -5095,10 +5093,10 @@ void Spell::EffectAddExtraAttacks(SpellEffectIndex /*eff_idx*/)
     if (!unitTarget || !unitTarget->IsAlive())
         return;
 
-    if (unitTarget->m_extraAttacks)
-        return;
-
-    unitTarget->m_extraAttacks = damage;
+    unitTarget->m_extraAttacks += damage;
+    if (unitTarget->m_extraAttacks > 5)
+        unitTarget->m_extraAttacks = 5;
+    unitTarget->m_extraAttackGuid = unitTarget->GetVictim() ? unitTarget->GetVictim()->GetObjectGuid() : ObjectGuid();
     m_spellLog.AddLog(uint32(SPELL_EFFECT_ADD_EXTRA_ATTACKS), unitTarget->GetObjectGuid(), damage);
 }
 

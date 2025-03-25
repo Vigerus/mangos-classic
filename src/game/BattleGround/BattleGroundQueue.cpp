@@ -224,7 +224,7 @@ GroupQueueInfo* BattleGroundQueueItem::AddGroup(ObjectGuid leader, AddGroupToQue
                     if (!(*itr)->isInvitedToBgInstanceGuid)
                         qHorde += (*itr)->players.size();
 
-                sWorld.GetMessager().AddMessage([playerGuid = leader, bgName, q_min_level, qMaxLevel, qAlliance, minPlayers, qHorde](World* world)
+                sWorld.GetMessager().AddMessage([playerGuid = leader, bgName, q_min_level, qMaxLevel, qAlliance, minPlayers, qHorde](World* /*world*/)
                 {
                     // Show queue status to player only (when joining queue)
                     if (sWorld.getConfig(CONFIG_UINT32_BATTLEGROUND_QUEUE_ANNOUNCER_JOIN) == 1)
@@ -442,7 +442,7 @@ bool BattleGroundQueueItem::InviteGroupToBg(GroupQueueInfo* groupInfo, BattleGro
         // loop through the players
         for (auto itr = groupInfo->players.begin(); itr != groupInfo->players.end(); ++itr)
         {
-            sWorld.GetMessager().AddMessage([playerGuid = itr->first, bgQueueTypeId, bgTypeId, isInvited = groupInfo->isInvitedToBgInstanceGuid, clientInstanceId = queueInfo.GetClientInstanceId(), mapId = queueInfo.GetMapId(), removeInviteTime = groupInfo->removeInviteTime, instanceId = queueInfo.GetInstanceId(), isBg = queueInfo.IsBattleGround()](World* world)
+            sWorld.GetMessager().AddMessage([playerGuid = itr->first, bgQueueTypeId, bgTypeId, isInvited = groupInfo->isInvitedToBgInstanceGuid, clientInstanceId = queueInfo.GetClientInstanceId(), mapId = queueInfo.GetMapId(), removeInviteTime = groupInfo->removeInviteTime, instanceId = queueInfo.GetInstanceId(), isBg = queueInfo.IsBattleGround()](World* /*world*/)
             {
                 Player* plr = sObjectMgr.GetPlayer(playerGuid);
                 // if offline, skip him, can happen due to asynchronicity now
@@ -786,7 +786,7 @@ void BattleGroundQueueItem::Update(BattleGroundQueue& queue, BattleGroundTypeId 
     // battleground with free slot for player should be always in the beggining of the queue
     // maybe it would be better to create bgfreeslotqueue for each bracket_id
     BgFreeSlotQueueType::iterator next;
-    auto queueItems = queue.GetFreeSlotQueueItem(bgTypeId);
+    auto& queueItems = queue.GetFreeSlotQueueItem(bgTypeId);
     for (BgFreeSlotQueueType::iterator itr = queueItems.begin(); itr != queueItems.end(); itr = next)
     {
         BattleGroundInQueueInfo& queueInfo = *itr;
@@ -815,7 +815,7 @@ void BattleGroundQueueItem::Update(BattleGroundQueue& queue, BattleGroundTypeId 
             {
                 // remove BG from BGFreeSlotQueue
                 queueItems.erase(itr);
-                sWorld.GetMessager().AddMessage([instanceId = queueInfo.instanceId, typeId = queueInfo.bgTypeId](World* world)
+                sWorld.GetMessager().AddMessage([instanceId = queueInfo.instanceId, typeId = queueInfo.bgTypeId](World* /*world*/)
                 {
                     if (BattleGround* bg = sBattleGroundMgr.GetBattleGround(instanceId, typeId))
                     {
@@ -861,8 +861,6 @@ void BattleGroundQueueItem::Update(BattleGroundQueue& queue, BattleGroundTypeId 
         bgInfo.instanceId = sMapMgr.GenerateInstanceId();
         bgInfo.m_clientInstanceId = queue.CreateClientVisibleInstanceId(bgTypeId, bracketId);
 
-        queue.AddBgToFreeSlots(bgInfo);
-
         // invite those selection pools
         for (uint8 i = 0; i < PVP_TEAM_COUNT; ++i)
             for (GroupsQueueType::const_iterator citr = m_selectionPools[TEAM_INDEX_ALLIANCE + i].selectedGroups.begin(); citr != m_selectionPools[TEAM_INDEX_ALLIANCE + i].selectedGroups.end(); ++citr)
@@ -871,6 +869,8 @@ void BattleGroundQueueItem::Update(BattleGroundQueue& queue, BattleGroundTypeId 
         // clear structures
         m_selectionPools[TEAM_INDEX_ALLIANCE].Init();
         m_selectionPools[TEAM_INDEX_HORDE].Init();
+
+        queue.AddBgToFreeSlots(bgInfo);
 
         sWorld.GetMessager().AddMessage([instanceId = bgInfo.instanceId, clientInstanceId = bgInfo.m_clientInstanceId, bgTypeId, bracketId, allianceCount = bgInfo.GetInvitedCount(ALLIANCE), hordeCount = bgInfo.GetInvitedCount(HORDE)](World* world)
         {
@@ -901,12 +901,12 @@ void BattleGroundQueueItem::Update(BattleGroundQueue& queue, BattleGroundTypeId 
         bgInfo.instanceId = sMapMgr.GenerateInstanceId();
         bgInfo.m_clientInstanceId = queue.CreateClientVisibleInstanceId(bgTypeId, bracketId);
 
-        queue.AddBgToFreeSlots(bgInfo);
-
         // invite those selection pools
         for (uint8 i = 0; i < PVP_TEAM_COUNT; ++i)
             for (GroupsQueueType::const_iterator citr = m_selectionPools[TEAM_INDEX_ALLIANCE + i].selectedGroups.begin(); citr != m_selectionPools[TEAM_INDEX_ALLIANCE + i].selectedGroups.end(); ++citr)
                 InviteGroupToBg((*citr), bgInfo, (*citr)->groupTeam);
+
+        queue.AddBgToFreeSlots(bgInfo);
 
         sWorld.GetMessager().AddMessage([instanceId = bgInfo.instanceId, clientInstanceId = bgInfo.m_clientInstanceId, bgTypeId, bracketId, allianceCount = bgInfo.GetInvitedCount(ALLIANCE), hordeCount = bgInfo.GetInvitedCount(HORDE)](World* world)
         {
@@ -1227,7 +1227,7 @@ void BattleGroundQueue::RemovePlayer(BattleGroundQueueTypeId bgQueueTypeId, Obje
 void BattleGroundInQueueInfo::DecreaseInvitedCount(Team team)
 {
     uint32 count = (team == ALLIANCE) ? --m_invitedAlliance : --m_invitedHorde;
-    sWorld.GetMessager().AddMessage([bgTypeId = GetTypeId(), instanceId = GetInstanceId(), team, count](World* world)
+    sWorld.GetMessager().AddMessage([bgTypeId = GetTypeId(), instanceId = GetInstanceId(), team, count](World* /*world*/)
     {
         if (BattleGround* bg = sBattleGroundMgr.GetBattleGround(instanceId, bgTypeId))
             bg->SetInvitedCount(team, count);
@@ -1237,7 +1237,7 @@ void BattleGroundInQueueInfo::DecreaseInvitedCount(Team team)
 void BattleGroundInQueueInfo::IncreaseInvitedCount(Team team)
 {
     uint32 count = (team == ALLIANCE) ? ++m_invitedAlliance : ++m_invitedHorde;
-    sWorld.GetMessager().AddMessage([bgTypeId = GetTypeId(), instanceId = GetInstanceId(), team, count](World* world)
+    sWorld.GetMessager().AddMessage([bgTypeId = GetTypeId(), instanceId = GetInstanceId(), team, count](World* /*world*/)
     {
         if (BattleGround* bg = sBattleGroundMgr.GetBattleGround(instanceId, bgTypeId))
             bg->SetInvitedCount(team, count);
