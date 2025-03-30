@@ -58,8 +58,8 @@ void instance_temple_of_ahnqiraj::ResetEncounter()
 {
    for (uint32 i = 0; i < MAX_ENCOUNTER; ++i)
    {
-      if (m_auiEncounter[i] == IN_PROGRESS)
-         m_auiEncounter[i] = NOT_STARTED;
+      if (m_encounter[i] == IN_PROGRESS)
+         m_encounter[i] = NOT_STARTED;
    }
 }
 
