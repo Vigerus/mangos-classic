@@ -50,6 +50,7 @@
 #include "Tools/Formulas.h"
 #include "Entities/Transports.h"
 #include "Anticheat/Anticheat.hpp"
+#include "Spells/SpellStacking.h"
 #include "Log/LogHelper.h"
 
 #ifdef BUILD_METRICS
@@ -598,7 +599,7 @@ void Unit::TriggerHomeEvents()
     if (!hasUnitState(UNIT_STAT_NO_FOLLOW_MOVEMENT))
     {
         if (Unit* target = GetMaster())
-            GetMotionMaster()->MoveFollow(target, PET_FOLLOW_DIST, PET_FOLLOW_ANGLE, false, IsPlayer() && !HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PLAYER_CONTROLLED));
+            AI()->RequestFollow(target);
         else if (IsLinkingEventTrigger())
             GetMap()->GetCreatureLinkingHolder()->TryFollowMaster((Creature*)this);
     }
@@ -1751,6 +1752,9 @@ SpellCastResult Unit::CastSpell(SpellCastArgs& args, SpellEntry const* spellInfo
 
     if (args.IsDestinationSet())
         targets.setDestination(args.GetDestination());
+
+    if (args.IsItemTargetSet())
+        targets.setItemTarget(args.GetItemTarget());
 
     spell->SetCastItem(castItem);
     return spell->SpellStart(&targets, triggeredByAura);
@@ -4649,6 +4653,24 @@ int32 Unit::GetMaxNegativeAuraModifierByMiscValue(AuraType auratype, int32 misc_
     return modifier;
 }
 
+int32 Unit::GetMaxPositiveAuraModifierByItemClass(AuraType auratype, Item* weapon) const
+{
+    int32 modifier = 0;
+
+    AuraList const& mTotalAuraList = GetAurasByType(auratype);
+    for (auto i : mTotalAuraList)
+    {
+        Modifier* mod = i->GetModifier();
+        SpellEntry const* spellProto = i->GetSpellProto();
+        if (spellProto->EquippedItemClass == -1 ||
+            (weapon->IsFitToSpellRequirements(spellProto)))
+            if (mod->m_amount > modifier)
+                modifier = mod->m_amount;
+    }
+
+    return modifier;
+}
+
 bool Unit::AddSpellAuraHolder(SpellAuraHolder* holder)
 {
     SpellEntry const* aurSpellInfo = holder->GetSpellProto();
@@ -4724,13 +4746,14 @@ bool Unit::AddSpellAuraHolder(SpellAuraHolder* holder)
             }
             else
             {
-                //any stackable case with amount should mod existing stack amount
-                if (aurSpellInfo->StackAmount && !IsChanneledSpell(aurSpellInfo) && !aurSpellInfo->HasAttribute(SPELL_ATTR_EX3_DOT_STACKING_RULE))
+                // any stackable case with amount should mod existing stack amount
+                bool isStackable = sSpellStacker.IsSpellStackableWithSpellForDifferentCasters(aurSpellInfo, foundHolder->GetSpellProto(), true, this);
+                if (aurSpellInfo->StackAmount && !IsChanneledSpell(aurSpellInfo) && !isStackable)
                 {
                     foundHolder->ModStackAmount(holder->GetStackAmount(), holder->GetCaster());
                     return false;
                 }
-                else if (!IsStackableSpell(aurSpellInfo, foundHolder->GetSpellProto(), holder->GetTarget()))
+                else if (!isStackable)
                 {
                     RemoveSpellAuraHolder(foundHolder, AURA_REMOVE_BY_STACK);
                     break;
@@ -4899,7 +4922,7 @@ bool Unit::RemoveNoStackAurasDueToAuraHolder(SpellAuraHolder* holder)
     }
 
     const uint32 spellId = holder->GetId();
-    const SpellSpecific specific = GetSpellSpecific(spellId);
+    SpellGroupSpellData const* data = sSpellStacker.GetSpellGroupDataForSpell(spellId);
     auto drGroup = holder->getDiminishGroup();
     SpellEntry const* triggeredBy = holder->GetTriggeredBy();
 
@@ -4917,7 +4940,7 @@ bool Unit::RemoveNoStackAurasDueToAuraHolder(SpellAuraHolder* holder)
             continue;
 
         const uint32 existingSpellId = existingSpellProto->Id;
-        const SpellSpecific existingSpecific = GetSpellSpecific(existingSpellId);
+        SpellGroupSpellData const* existingData = sSpellStacker.GetSpellGroupDataForSpell(existingSpellId);
         auto existingDrGroup = existing->getDiminishGroup();
         const bool own = (holder->GetCasterGuid() == existing->GetCasterGuid());
 
@@ -4942,12 +4965,15 @@ bool Unit::RemoveNoStackAurasDueToAuraHolder(SpellAuraHolder* holder)
 
         bool unique = false;
         bool personal = false;
-        if (specific && existingSpecific && IsSpellSpecificIdentical(specific, existingSpecific))
-
-
+        if (spellId == existingSpellId)
         {
-            personal = IsSpellSpecificUniquePerCaster(specific);
-            unique = (personal || IsSpellSpecificUniquePerTarget(specific));
+            personal = false;
+            unique = (personal || spellProto->HasAttribute(SpellAttributesEx::SPELL_ATTR_EX_AURA_UNIQUE));
+        }
+        if (data && existingData && (data->mask & existingData->mask) != 0)
+        {
+            personal = data->rule == SpellGroupRule::UNIQUE_PER_CASTER;
+            unique = (personal || data->rule == SpellGroupRule::UNIQUE);
         }
 
         bool diminished = false;
@@ -4958,7 +4984,7 @@ bool Unit::RemoveNoStackAurasDueToAuraHolder(SpellAuraHolder* holder)
             unique = diminished;
         }
 
-        bool stackable = (own ? sSpellMgr.IsSpellStackableWithSpell(spellProto, existingSpellProto) : sSpellMgr.IsSpellStackableWithSpellForDifferentCasters(spellProto, existingSpellProto));
+        bool stackable = (own ? sSpellStacker.IsSpellStackableWithSpell(spellProto, existingSpellProto, this) : sSpellStacker.IsSpellStackableWithSpellForDifferentCasters(spellProto, existingSpellProto, sSpellMgr.IsSpellAnotherRankOfSpell(spellProto->Id, existingSpellProto->Id), this));
 
         // Remove only own auras when multiranking
         if (!unique && own && stackable && sSpellMgr.IsSpellAnotherRankOfSpell(spellId, existingSpellId))
@@ -4986,8 +5012,7 @@ bool Unit::RemoveNoStackAurasDueToAuraHolder(SpellAuraHolder* holder)
             if (!IsSpellWithCasterSourceTargetsOnly(spellProto) && !IsSpellWithCasterSourceTargetsOnly(existingSpellProto))
             {
                 // holder cannot remove higher/stronger rank if it isn't from the same caster
-                // judgement excluded due to invalid comparison of dummy auras
-                if (specific != SPELL_JUDGEMENT && IsSimilarExistingAuraStronger(holder, existing)) // TROLOLO
+                if (IsSimilarExistingAuraStronger(holder, existing)) // TROLOLO
                     return false;
 
                 if (!diminished && sSpellMgr.IsSpellAnotherRankOfSpell(spellId, existingSpellId) && sSpellMgr.IsSpellHigherRankOfSpell(existingSpellId, spellId))
@@ -5977,19 +6002,21 @@ void Unit::CasterHitTargetWithSpell(Unit* realCaster, Unit* target, SpellEntry c
         if (success && !target->IsStandState() && !target->IsInCombat())
             target->SetStandState(UNIT_STAND_STATE_STAND);
 
-        // Hostile spellInfo hits count as attack made against target (if detected), stealth removed at Spell::cast if spellInfo break it
-        const bool attack = (!IsPositiveSpell(spellInfo->Id, realCaster, target) && realCaster->IsVisibleForOrDetect(target, target, false) && realCaster->CanEnterCombat() && target->CanEnterCombat());
+        // Hostile spell hits count as attack made against target (if detected), stealth removed at Spell::cast if spell break it
+        const bool bypassStealthAndEndIt = spellInfo->HasAttribute(SPELL_ATTR_EX_FAILURE_BREAKS_STEALTH) && !success;
+        const bool attack = (!IsPositiveSpell(spellInfo->Id, realCaster, target) && realCaster->IsVisibleForOrDetect(target, target, false, false, true, bypassStealthAndEndIt) &&
+                             realCaster->CanEnterCombat() && target->CanEnterCombat());
 
         // Mind soothe confirmed to aggro on resist
         if (attack && (!success || !spellInfo->HasAttribute(SPELL_ATTR_EX_THREAT_ONLY_ON_MISS)) && !spellInfo->HasAttribute(SPELL_ATTR_EX_NO_THREAT))
         {
-            if (success && !spellInfo->HasAttribute(SPELL_ATTR_EX2_NOT_AN_ACTION))
+            if (success && !spellInfo->HasAttribute(SPELL_ATTR_EX2_NOT_AN_ACTION) || bypassStealthAndEndIt)
             {
                 target->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_HOSTILE_ACTION);
 
                 // caster can be detected but have stealth aura
-                if (!spellInfo->HasAttribute(SPELL_ATTR_EX_ALLOW_WHILE_STEALTHED))
-                    realCaster->RemoveSpellsCausingAura(SPELL_AURA_MOD_STEALTH);
+                if (bypassStealthAndEndIt) // all other cases are handled through AURA_INTERRUPT_FLAG_ACTION
+                    realCaster->RemoveAurasWithDispelType(DISPEL_STEALTH);
             }
 
             target->AttackedBy(realCaster);
@@ -9145,7 +9172,7 @@ float Unit::GetTotalAttackPowerValue(WeaponAttackType attType) const
             return 0.0f;
         return ap * (1.0f + GetFloatValue(UNIT_FIELD_RANGED_ATTACK_POWER_MULTIPLIER));
     }
-    int32 ap = GetInt32Value(UNIT_FIELD_ATTACK_POWER) + GetUInt16Value(UNIT_FIELD_ATTACK_POWER_MODS, 0) - GetUInt16Value(UNIT_FIELD_ATTACK_POWER_MODS, 1);
+    int32 ap = GetInt32Value(UNIT_FIELD_ATTACK_POWER) + GetInt16Value(UNIT_FIELD_ATTACK_POWER_MODS, 0) + GetInt16Value(UNIT_FIELD_ATTACK_POWER_MODS, 1);
     if (ap < 0)
         return 0.0f;
     return ap * (1.0f + GetFloatValue(UNIT_FIELD_ATTACK_POWER_MULTIPLIER));
@@ -11828,7 +11855,7 @@ void Unit::AdjustZForCollision(float x, float y, float& z, float halfHeight) con
     }
 }
 
-uint32 Unit::GetSpellRank(SpellEntry const* spellInfo)
+uint32 Unit::GetSpellRank(SpellEntry const* spellInfo) const
 {
     uint32 spellRank = GetLevel();
     if (spellInfo->maxLevel > 0 && spellRank >= spellInfo->maxLevel * 5)

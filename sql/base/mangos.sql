@@ -23,7 +23,7 @@ DROP TABLE IF EXISTS `db_version`;
 CREATE TABLE `db_version` (
   `version` varchar(120) DEFAULT NULL,
   `creature_ai_version` varchar(120) DEFAULT NULL,
-  `required_z2826_01_mangos_spawn_group_squad` bit(1) DEFAULT NULL
+  `required_z2830_01_mangos_icon_name` bit(1) DEFAULT NULL
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='Used DB version notes';
 
 --
@@ -766,6 +766,14 @@ LOCK TABLES `creature_addon` WRITE;
 /*!40000 ALTER TABLE `creature_addon` DISABLE KEYS */;
 /*!40000 ALTER TABLE `creature_addon` ENABLE KEYS */;
 UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `creature_zone`;
+CREATE TABLE `creature_zone` (
+  `Guid` int unsigned NOT NULL AUTO_INCREMENT COMMENT 'Global Unique Identifier',
+  `ZoneId` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Zone Identifier',
+  `AreaId` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Area Identifier',
+  PRIMARY KEY(`Guid`)
+);
 
 --
 -- Table structure for table `creature_ai_scripts`
@@ -1955,6 +1963,14 @@ CREATE TABLE `gameobject_addon` (
   PRIMARY KEY(`guid`)
 );
 
+DROP TABLE IF EXISTS `gameobject_zone`;
+CREATE TABLE `gameobject_zone` (
+  `Guid` int unsigned NOT NULL AUTO_INCREMENT COMMENT 'Global Unique Identifier',
+  `ZoneId` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Zone Identifier',
+  `AreaId` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Area Identifier',
+  PRIMARY KEY(`Guid`)
+);
+
 DROP TABLE IF EXISTS `gameobject_spawn_entry`;
 CREATE TABLE `gameobject_spawn_entry`(
 `guid` INT UNSIGNED NOT NULL COMMENT 'Gameobject table guid',
@@ -2059,6 +2075,7 @@ CREATE TABLE `gameobject_template` (
   `type` tinyint(3) unsigned NOT NULL DEFAULT '0',
   `displayId` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `name` varchar(100) NOT NULL DEFAULT '',
+  `IconName` varchar(100) NOT NULL DEFAULT '',
   `faction` smallint(5) unsigned NOT NULL DEFAULT '0',
   `flags` int(10) unsigned NOT NULL DEFAULT '0',
   `ExtraFlags` int(10) unsigned NOT NULL DEFAULT '0',
@@ -12551,6 +12568,21 @@ INSERT INTO `spell_elixir` VALUES
 (27653,0x2);
 /*!40000 ALTER TABLE `spell_elixir` ENABLE KEYS */;
 UNLOCK TABLES;
+
+DROP TABLE IF EXISTS `spell_group`;
+CREATE TABLE `spell_group`(
+  `Id` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Spell Group Identifier',
+  `Rule` smallint unsigned NOT NULL,
+  `Name` varchar(200) CHARACTER SET utf8mb3 COLLATE utf8mb3_general_ci NOT NULL COMMENT 'Description of usage',
+  PRIMARY KEY(`Id`)
+);
+
+DROP TABLE IF EXISTS `spell_group_spell`;
+CREATE TABLE `spell_group_spell`(
+  `Id` mediumint unsigned NOT NULL DEFAULT '0' COMMENT 'Identifier',
+  `SpellId` int unsigned NOT NULL,
+  PRIMARY KEY(`Id`,`SpellId`)
+);
 
 --
 -- Table structure for table `spell_facing`

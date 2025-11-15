@@ -371,3 +371,13 @@ UPDATE spell_template SET EffectBonusCoefficientFromAP1=0.03 WHERE Id IN (9007,9
 -- UPDATE spell_template SET EffectBonusCoefficientFromAP1=0.02 WHERE Id IN (13797,14298,14299,14300,14301); -- Immolation Trap Effect
 -- UPDATE spell_template SET EffectBonusCoefficientFromAP1=0.1, EffectBonusCoefficientFromAP2=0.1 WHERE Id IN (13812,14314,14315); -- Explosive Trap Effect
 UPDATE spell_template SET EffectBonusCoefficientFromAP1=0.08 WHERE Id IN (779,780,769,9754,9908); -- Swipe
+
+-- uniqueness aura stacking rules
+UPDATE spell_template SET AttributesEx=AttributesEx|0x00000800 WHERE Id IN(8733); -- Blessing of Blackfathom
+UPDATE spell_template SET AttributesEx=AttributesEx|0x00000800 WHERE Id IN(24425); -- Spirit of Zandalar
+UPDATE spell_template SET AttributesEx=AttributesEx|0x00000800 WHERE Id IN(26522); -- Lunar Fortune
+
+-- fix temp enchant durations - vanilla only and differs per expansion
+UPDATE spell_template SET EffectBasePoints1=1799 WHERE Id IN(2823,2824,3408,5761,8679,8686,8688,8693,11202,11338,11339,11340,11355,11356,11399,13219,13225,13226,13227,25351);
+UPDATE spell_template SET EffectBasePoints1=1799 WHERE Id IN(3594,6650); -- Shadow oil and instant toxin
+UPDATE spell_template SET EffectBasePoints1=599 WHERE Id IN('8087','8088','8089','8090','8532','9092'); -- fishing lures

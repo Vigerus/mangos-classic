@@ -1665,6 +1665,17 @@ class Unit : public WorldObject
             return false;
         }
 
+        template <typename Func>
+        bool HasAuraHolder(uint32 spellId, Func func) const
+        {
+            SpellAuraHolderConstBounds spair = GetSpellAuraHolderBounds(spellId);
+            for (SpellAuraHolderMap::const_iterator i_holder = spair.first; i_holder != spair.second; ++i_holder)
+                if (func(i_holder->second))
+                    return true;
+
+            return false;
+        }
+
         template<typename Func>
         bool HasAura(Func func, AuraType type) const
         {
@@ -1775,6 +1786,7 @@ class Unit : public WorldObject
         bool IsMoving() const { return m_movementInfo.HasMovementFlag(movementFlagsMask); }
         bool IsMovingForward() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_MASK_MOVING_FORWARD); }
         bool IsLevitating() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_LEVITATING); }
+        bool IsHovering() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_HOVER); }
         bool IsWalking() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_WALK_MODE); }
         bool IsRooted() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_ROOT); }
         bool IsFalling() const { return m_movementInfo.HasMovementFlag(MOVEFLAG_JUMPING); }
@@ -2112,6 +2124,8 @@ class Unit : public WorldObject
         int32 GetMaxPositiveAuraModifierByMiscValue(AuraType auratype, int32 misc_value) const;
         int32 GetMaxNegativeAuraModifierByMiscValue(AuraType auratype, int32 misc_value) const;
 
+        int32 GetMaxPositiveAuraModifierByItemClass(AuraType auratype, Item* weapon) const;
+
         Aura* GetDummyAura(uint32 spell_id) const;
 
         uint32 m_AuraFlags;
@@ -2398,7 +2412,7 @@ class Unit : public WorldObject
         void UpdateAllowedPositionZ(float x, float y, float& z, Map* atMap = nullptr) const override;
         void AdjustZForCollision(float x, float y, float& z, float halfHeight) const override;
 
-        virtual uint32 GetSpellRank(SpellEntry const* spellInfo);
+        virtual uint32 GetSpellRank(SpellEntry const* spellInfo) const;
 
         bool HasOverrideScript(uint32 id) const;
         Aura* GetOverrideScript(uint32 id) const;

@@ -55,53 +55,32 @@ enum
     NPC_ENTHRALLED_DEEPRUN_RAT          = 13017,
 };
 
-bool EffectAuraDummy_spell_aura_dummy_npc(const Aura* pAura, bool bApply)
+// 21050 - Melodious Rapture
+struct MelodiousRapture : public SpellScript
 {
-    switch (pAura->GetId())
+    SpellCastResult OnCheckCast(Spell* spell, bool /*strict*/) const override
     {
-        case SPELL_SHROUD_OF_DEATH:
-        case SPELL_SPIRIT_PARTICLES:
-        {
-            Creature* pCreature = (Creature*)pAura->GetTarget();
+        Unit* target = spell->m_targets.getUnitTarget();
+        if (!target || target->GetEntry() != NPC_DEEPRUN_RAT)
+            return SPELL_FAILED_BAD_TARGETS;
 
-            if (!pCreature || (pCreature->GetEntry() != NPC_FRANCLORN_FORGEWRIGHT && pCreature->GetEntry() != NPC_GAERIYAN))
-                return false;
-
-            if (bApply)
-                pCreature->m_AuraFlags |= UNIT_AURAFLAG_ALIVE_INVISIBLE;
-            else
-                pCreature->m_AuraFlags &= ~UNIT_AURAFLAG_ALIVE_INVISIBLE;
-
-            return false;
-        }
+        return SPELL_CAST_OK;
     }
 
-    return false;
-}
-
-bool EffectDummyCreature_spell_dummy_npc(Unit* pCaster, uint32 uiSpellId, SpellEffectIndex uiEffIndex, Creature* pCreatureTarget, ObjectGuid /*originalCasterGuid*/)
-{
-    switch (uiSpellId)
+    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
     {
-        case SPELL_MELODIOUS_RAPTURE:
-        {
-            if (uiEffIndex == EFFECT_INDEX_0)
-            {
-                if (pCaster->GetTypeId() != TYPEID_PLAYER && pCreatureTarget->GetEntry() != NPC_DEEPRUN_RAT)
-                    return true;
+        Unit* caster = spell->GetCaster();
+        Unit* target = spell->GetUnitTarget();
+        if (caster->IsPlayer())
+            return;
 
-                pCreatureTarget->UpdateEntry(NPC_ENTHRALLED_DEEPRUN_RAT);
-                pCreatureTarget->CastSpell(pCreatureTarget, SPELL_MELODIOUS_RAPTURE_VISUAL, TRIGGERED_NONE);
-                pCreatureTarget->GetMotionMaster()->MoveFollow(pCaster, frand(0.5f, 3.0f), frand(M_PI_F * 0.8f, M_PI_F * 1.2f));
+        static_cast<Creature*>(target)->UpdateEntry(NPC_ENTHRALLED_DEEPRUN_RAT);
+        target->CastSpell(nullptr, SPELL_MELODIOUS_RAPTURE_VISUAL, TRIGGERED_NONE);
+        target->GetMotionMaster()->MoveFollow(caster, frand(0.5f, 3.0f), frand(M_PI_F * 0.8f, M_PI_F * 1.2f));
 
-                ((Player*)pCaster)->KilledMonsterCredit(NPC_ENTHRALLED_DEEPRUN_RAT);
-            }
-            return true;
-        }
+        static_cast<Player*>(caster)->KilledMonsterCredit(NPC_ENTHRALLED_DEEPRUN_RAT);
     }
-
-    return false;
-}
+};
 
 struct GreaterInvisibilityMob : public AuraScript
 {
@@ -404,17 +383,58 @@ struct IllusionPassive : public AuraScript
     }
 };
 
+// 25680, 27628 - Random Aggro
+struct RandomAggro : public SpellScript
+{
+    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
+    {
+        // 27628 - unknown if it should cause some high threat
+        Unit* caster = spell->GetCaster();
+        spell->GetCaster()->AddThreat(spell->GetUnitTarget());
+    }
+};
+
+// 22913 - Random Aggro 
+struct RandomAggro1000000 : public SpellScript
+{
+    void OnCast(Spell* spell) const override
+    {
+        Spell::TargetList const& list = spell->GetTargetList();
+        if (!list.empty())
+        {
+            auto itr = list.begin();
+            std::advance(itr, urand(0, list.size() - 1));
+            Unit* target = spell->GetCaster()->GetMap()->GetPlayer((*itr).targetGUID);
+            if (target)
+                spell->GetCaster()->AddThreat(target, 1000000.f);
+        }
+    }
+
+    void OnEffectExecute(Spell* spell, SpellEffectIndex /*effIdx*/) const override
+    {
+        Unit* caster = spell->GetCaster();
+        spell->GetCaster()->AddThreat(spell->GetUnitTarget());
+    }
+};
+
+// 27978, 40131 - Shroud of Death
+struct InvisibleForAlive : public AuraScript
+{
+    void OnApply(Aura* aura, bool apply) const override
+    {
+        if (apply)
+            aura->GetTarget()->m_AuraFlags |= UNIT_AURAFLAG_ALIVE_INVISIBLE;
+        else
+            aura->GetTarget()->m_AuraFlags &= ~UNIT_AURAFLAG_ALIVE_INVISIBLE;
+    }
+};
+
 void AddSC_spell_scripts()
 {
-    Script* pNewScript = new Script;
-    pNewScript->Name = "spell_dummy_npc";
-    pNewScript->pEffectDummyNPC = &EffectDummyCreature_spell_dummy_npc;
-    pNewScript->pEffectAuraDummy = &EffectAuraDummy_spell_aura_dummy_npc;
-    pNewScript->RegisterSelf();
-
+    RegisterSpellScript<MelodiousRapture>("spell_melodious_rapture");
+    RegisterSpellScript<GreaterInvisibilityMob>("spell_greater_invisibility_mob");
     RegisterSpellScript<WondervoltTrap>("spell_wondervolt_trap");
     RegisterSpellScript<ArcaneCloaking>("spell_arcane_cloaking");
-    RegisterSpellScript<GreaterInvisibilityMob>("spell_greater_invisibility_mob");
     RegisterSpellScript<FoodAnimation>("spell_food_animation");
     RegisterSpellScript<DrinkAnimation>("spell_drink_animation");
     RegisterSpellScript<spell_effect_summon_no_follow_movement>("spell_effect_summon_no_follow_movement");
@@ -430,4 +450,7 @@ void AddSC_spell_scripts()
     RegisterSpellScript<Stoned>("spell_stoned");
     RegisterSpellScript<GameobjectCallForHelpOnUsage>("spell_gameobject_call_for_help_on_usage");
     RegisterSpellScript<IllusionPassive>("spell_illusion_passive");
+    RegisterSpellScript<RandomAggro>("spell_random_aggro");
+    RegisterSpellScript<RandomAggro1000000>("spell_random_aggro_1000000");
+    RegisterSpellScript<InvisibleForAlive>("spell_shroud_of_death");
 }

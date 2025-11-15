@@ -576,6 +576,7 @@ void Player::UpdateWeaponDependantStats(WeaponAttackType attType)
             break;
         case RANGED_ATTACK:
             UpdateWeaponHitChances(attType);
+            UpdateRangedWeaponDependantAmmoHasteAura();
             break;
     }
 }
@@ -797,6 +798,18 @@ float Creature::GetConditionalTotalPhysicalDamageModifier(WeaponAttackType attTy
     if (hasWeapon(attType) && !hasWeaponForAttack(attType))
         result *= 0.5f;
     return result;
+}
+
+void Creature::UpdateMaxHealth()
+{
+    UnitMods unitMod = UNIT_MOD_HEALTH;
+
+    float value = GetModifierValue(unitMod, BASE_VALUE) + GetCreateHealth();
+    value *= GetModifierValue(unitMod, BASE_PCT) * m_healthMultiplier; // health multiplier affects base health AND stamina increase
+    value += GetModifierValue(unitMod, TOTAL_VALUE) + GetHealthBonusFromStamina() * m_healthMultiplier;
+    value *= GetModifierValue(unitMod, TOTAL_PCT);
+
+    SetMaxHealth(uint32(std::round(std::max(value, 1.f))));
 }
 
 float Creature::GetHealthBonusFromStamina() const
