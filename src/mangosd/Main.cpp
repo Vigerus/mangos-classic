@@ -44,6 +44,10 @@
 #include <iostream>
 #include <string>
 
+#ifdef ENABLE_PLAYERBOTS
+#include "playerbot/PlayerbotAIConfig.h"
+#endif
+
 #ifdef _WIN32
 #include "Platform/ServiceWin32.h"
 char serviceName[] = "mangosd";
@@ -80,7 +84,7 @@ int main(int argc, char* argv[])
     }
 
 
-    std::string auctionBotConfig, configFile, playerBotConfig, serviceParameter;
+    std::string auctionBotConfig, configFile, playerBotConfig, aiPlayerBotConfig, serviceParameter;
 
     boost::program_options::options_description desc("Allowed options");
     desc.add_options()
@@ -88,6 +92,9 @@ int main(int argc, char* argv[])
     ("config,c", boost::program_options::value<std::string>(&configFile)->default_value(_MANGOSD_CONFIG), "configuration file")
 #ifdef BUILD_DEPRECATED_PLAYERBOT
     ("playerbot,p", boost::program_options::value<std::string>(&playerBotConfig)->default_value(_D_PLAYERBOT_CONFIG), "playerbot configuration file")
+#endif
+#ifdef ENABLE_PLAYERBOTS
+    ("aiplayerbot,p", boost::program_options::value<std::string>(&aiPlayerBotConfig)->default_value(_D_AIPLAYERBOT_CONFIG), "aiplayerbot configuration file")
 #endif
     ("help,h", "prints usage")
     ("version,v", "print version and exit")
@@ -131,6 +138,11 @@ int main(int argc, char* argv[])
 #ifdef BUILD_DEPRECATED_PLAYERBOT
     if (vm.count("playerbot"))
         _PLAYERBOT_CONFIG = playerBotConfig;
+#endif
+
+#ifdef ENABLE_PLAYERBOTS
+    if (vm.count("aiplayerbot"))
+        _PLAYERBOT_CONFIG = aiPlayerBotConfig;
 #endif
 
 #ifdef _WIN32                                                // windows service command need execute before config read
