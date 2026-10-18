@@ -95,7 +95,8 @@ if(WIN32)
 
   if(BUILD_PLAYERBOTS)
     add_custom_command(TARGET ${EXECUTABLE_NAME} POST_BUILD
-	  COMMAND ${CMAKE_COMMAND} -E copy_if_different \"${CMAKE_SOURCE_DIR}/src/modules/PlayerBots/playerbot/aiplayerbot.conf.dist.in\" \"$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/aiplayerbot.conf.dist\")
+	  COMMAND ${CMAKE_COMMAND} -E copy_if_different \"${CMAKE_SOURCE_DIR}/src/modules/PlayerBots/playerbot/aiplayerbot.conf.dist.in\" \"$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/aiplayerbot.conf.dist\"
+	  COMMAND ${CMAKE_COMMAND} -E copy_directory \"${CMAKE_SOURCE_DIR}/src/modules/PlayerBots/statetree\" \"$<TARGET_FILE_DIR:${EXECUTABLE_NAME}>/statetree\")
   endif()
 
   if(BUILD_AHBOT)
