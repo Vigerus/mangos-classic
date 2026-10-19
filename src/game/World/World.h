@@ -32,7 +32,10 @@
 #include "Globals/GraveyardManager.h"
 #include "LFG/LFGQueue.h"
 #include "BattleGround/BattleGroundQueue.h"
+#include "World/WorldSubsystem.h"
 
+#include <memory>
+#include <type_traits>
 #include <set>
 #include <list>
 #include <deque>
@@ -606,6 +609,32 @@ class World
         BattleGroundQueue& GetBGQueue() { return m_bgQueue; }
         void StartLFGQueueThread();
         void StartBGQueueThread();
+
+        // Registers a subsystem of class T (one per class), see WorldSubsystem. Only while the server starts:
+        // GetSubsystem is called from map threads without locking.
+        template <class T, class... Args>
+        T* RegisterSubsystem(Args&&... args)
+        {
+            static_assert(std::is_base_of<WorldSubsystem, T>::value, "T must derive from WorldSubsystem");
+            uint32 const index = GetWorldSubsystemTypeIndex<T>();
+            if (index >= m_subsystems.size())
+                m_subsystems.resize(index + 1);
+            MANGOS_ASSERT(!m_subsystems[index]);
+
+            m_subsystems[index] = std::make_unique<T>(std::forward<Args>(args)...);
+            m_subsystemOrder.push_back(index);
+            m_subsystems[index]->Initialize();
+            return static_cast<T*>(m_subsystems[index].get());
+        }
+
+        // the registered subsystem of class T, nullptr when there is none
+        template <class T>
+        T* GetSubsystem() const
+        {
+            static_assert(std::is_base_of<WorldSubsystem, T>::value, "T must derive from WorldSubsystem");
+            uint32 const index = GetWorldSubsystemTypeIndex<T>();
+            return index < m_subsystems.size() ? static_cast<T*>(m_subsystems[index].get()) : nullptr;
+        }
     protected:
         void _UpdateGameTime();
         // callback for UpdateRealmCharacters
@@ -730,6 +759,10 @@ class World
         std::thread m_lfgQueueThread;
         BattleGroundQueue m_bgQueue;
         std::thread m_bgQueueThread;
+
+        // indexed by GetWorldSubsystemTypeIndex<T>(), m_subsystemOrder keeps the registration order
+        std::vector<std::unique_ptr<WorldSubsystem>> m_subsystems;
+        std::vector<uint32> m_subsystemOrder;
 };
 
 extern uint32 realmID;

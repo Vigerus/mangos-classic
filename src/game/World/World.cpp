@@ -84,12 +84,20 @@
 #include "playerbot/RandomPlayerbotMgr.h"
 #endif
 
+#include "Spells/SpellAuraWorldSubsystem.h"
+
 #include <algorithm>
 #include <mutex>
 #include <cstdarg>
 #include <memory>
 
 INSTANTIATE_SINGLETON_1(World);
+
+uint32 GenerateWorldSubsystemTypeIndex()
+{
+    static std::atomic<uint32> nextIndex(0);
+    return nextIndex.fetch_add(1);
+}
 
 extern void LoadGameObjectModelList();
 
@@ -142,6 +150,8 @@ World::World(): mail_timer(0), mail_timer_expires(0), m_NextWeeklyQuestReset(0),
 
     for (bool& m_configBoolValue : m_configBoolValues)
         m_configBoolValue = false;
+
+    RegisterSubsystem<SpellAuraWorldSubsystem>();
 }
 
 /// World destructor
@@ -166,6 +176,13 @@ World::~World()
         m_lfgQueueThread.join();
     if (m_bgQueueThread.joinable())
         m_bgQueueThread.join();
+
+    // reverse registration order: later subsystems may use earlier ones
+    for (auto itr = m_subsystemOrder.rbegin(); itr != m_subsystemOrder.rend(); ++itr)
+    {
+        m_subsystems[*itr]->Deinitialize();
+        m_subsystems[*itr].reset();
+    }
 }
 
 /// Cleanups before world stop
@@ -1549,6 +1566,9 @@ void World::Update(uint32 diff)
     _UpdateGameTime();
 
     GetMessager().Execute(this);
+
+    for (uint32 index : m_subsystemOrder)
+        m_subsystems[index]->Update(diff);
 
     ///-Update mass mailer tasks if any
     sMassMailMgr.Update();

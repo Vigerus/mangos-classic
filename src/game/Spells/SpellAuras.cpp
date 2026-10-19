@@ -49,6 +49,7 @@
 #include "Loot/LootMgr.h"
 #include "AI/ScriptDevAI/include/sc_grid_searchers.h"
 #include "Spells/SpellStacking.h"
+#include "Spells/SpellAuraWorldSubsystem.h"
 
 #define NULL_AURA_SLOT 0xFF
 
@@ -5487,6 +5488,10 @@ void SpellAuraHolder::SetStackAmount(uint32 stackAmount, Unit* newCaster)
 
     if (refresh) // Stack increased refresh duration
         RefreshHolder();
+
+    if (uint32(oldStackAmount) != m_stackAmount)
+        if (SpellAuraWorldSubsystem* auraSubsystem = sWorld.GetSubsystem<SpellAuraWorldSubsystem>())
+            auraSubsystem->BroadcastAuraStackChanged(target, this, oldStackAmount, m_stackAmount);
 }
 
 Unit* SpellAuraHolder::GetCaster() const
@@ -5736,6 +5741,7 @@ void SpellAuraHolder::SetAuraCharges(uint32 charges, bool update)
 {
     if (m_procCharges == charges)
         return;
+    uint32 const oldCharges = m_procCharges;
     m_procCharges = charges;
 
     for (uint8 i = 0; i < MAX_EFFECT_INDEX; i++)
@@ -5745,6 +5751,11 @@ void SpellAuraHolder::SetAuraCharges(uint32 charges, bool update)
 
     if (update)
         UpdateAuraApplication();
+
+    // charges set while the holder is created are part of the aura being applied
+    if (m_target && m_spellAuraHolderState == SPELLAURAHOLDER_STATE_READY && !m_deleted)
+        if (SpellAuraWorldSubsystem* auraSubsystem = sWorld.GetSubsystem<SpellAuraWorldSubsystem>())
+            auraSubsystem->BroadcastAuraChargesChanged(m_target, this, oldCharges, m_procCharges);
 }
 
 bool SpellAuraHolder::DropAuraCharge()
@@ -5760,6 +5771,9 @@ bool SpellAuraHolder::DropAuraCharge()
                 spellMod->charges = m_procCharges;
 
     UpdateAuraApplication();
+
+    if (SpellAuraWorldSubsystem* auraSubsystem = sWorld.GetSubsystem<SpellAuraWorldSubsystem>())
+        auraSubsystem->BroadcastAuraChargesChanged(m_target, this, m_procCharges + 1, m_procCharges);
 
     if (GetCasterGuid() != m_target->GetObjectGuid() && IsAreaAura())
         if (Unit* caster = GetCaster())

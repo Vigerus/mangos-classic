@@ -51,6 +51,7 @@
 #include "Entities/Transports.h"
 #include "Anticheat/Anticheat.hpp"
 #include "Spells/SpellStacking.h"
+#include "Spells/SpellAuraWorldSubsystem.h"
 #include "Log/LogHelper.h"
 
 #ifdef BUILD_METRICS
@@ -4852,6 +4853,11 @@ bool Unit::AddSpellAuraHolder(SpellAuraHolder* holder)
             ++m_hasHeartbeatProcCounter;
     }
 
+    // boosts can remove the holder again, it then was already broadcast as removed
+    if (!holder->IsDeleted())
+        if (SpellAuraWorldSubsystem* auraSubsystem = sWorld.GetSubsystem<SpellAuraWorldSubsystem>())
+            auraSubsystem->BroadcastAuraApplied(this, holder);
+
     return true;
 }
 
@@ -5356,6 +5362,9 @@ void Unit::RemoveSpellAuraHolder(SpellAuraHolder* holder, AuraRemoveMode mode)
     // store it in holder list with delayed deletion
     holder->SetDeleted();
     m_deletedHolders.push_back(holder);
+
+    if (SpellAuraWorldSubsystem* auraSubsystem = sWorld.GetSubsystem<SpellAuraWorldSubsystem>())
+        auraSubsystem->BroadcastAuraRemoved(this, holder, mode);
 
     if (m_hasHeartbeatProcCounter)
     {
