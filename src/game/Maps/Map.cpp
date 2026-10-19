@@ -26,6 +26,7 @@
 #include "GridDefines.h"
 #include "Grids/GridNotifiersImpl.h"
 #include "Maps/InstanceData.h"
+#include "Maps/InstanceSubsystem.h"
 #include "Maps/MapPersistentStateMgr.h"
 #include "Entities/Transports.h"
 #include "Globals/ObjectAccessor.h"
@@ -466,6 +467,9 @@ bool Map::Add(Player* player)
 
     if (mp_instance_bot)
        mp_instance_bot->OnPlayerEnter(player);
+
+    if (InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>())
+        instances->BroadcastPlayerEnterMap(player, this);
 
     return true;
 }
@@ -1045,6 +1049,10 @@ void Map::Update(const uint32& t_diff)
 
 void Map::Remove(Player* player, bool remove)
 {
+    // before the player is cleaned up / removed from the world
+    if (InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>())
+        instances->BroadcastPlayerLeaveMap(player, this);
+
     if (i_data)
         i_data->OnPlayerLeave(player);
 
