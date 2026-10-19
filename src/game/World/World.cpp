@@ -85,6 +85,7 @@
 #endif
 
 #include "Spells/SpellAuraWorldSubsystem.h"
+#include "Groups/TeamSubsystem.h"
 
 #include <algorithm>
 #include <mutex>
@@ -152,6 +153,7 @@ World::World(): mail_timer(0), mail_timer_expires(0), m_NextWeeklyQuestReset(0),
         m_configBoolValue = false;
 
     RegisterSubsystem<SpellAuraWorldSubsystem>();
+    RegisterSubsystem<TeamSubsystem>();
 }
 
 /// World destructor

@@ -33,6 +33,7 @@
 #include "Maps/MapPersistentStateMgr.h"
 #include "Spells/SpellAuras.h"
 #include "BattleGround/BattleGroundMgr.h"
+#include "Groups/TeamSubsystem.h"
 #ifdef BUILD_DEPRECATED_PLAYERBOT
 #include "PlayerBot/Base/PlayerbotMgr.h"
 #endif
@@ -382,6 +383,9 @@ bool Group::AddMember(ObjectGuid guid, const char* name, uint8 joinMethod)
         }
     }
 
+    if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+        teams->BroadcastMemberJoined(this, guid);
+
     return true;
 }
 
@@ -401,6 +405,9 @@ uint32 Group::RemoveMember(ObjectGuid guid, uint8 method)
     {
         bool leaderChanged = _removeMember(guid);
         bool leftGroup = false;
+
+        if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+            teams->BroadcastMemberLeft(this, guid);
 
         if (player)
         {
@@ -503,6 +510,9 @@ void Group::ChangeLeader(ObjectGuid guid)
 
 void Group::Disband(bool hideDestroy)
 {
+    if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+        teams->BroadcastDisband(this);
+
     for (member_citerator citr = m_memberSlots.begin(); citr != m_memberSlots.end(); ++citr)
     {
         Player* player = sObjectMgr.GetPlayer(citr->guid);
