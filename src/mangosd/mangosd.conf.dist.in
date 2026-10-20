@@ -678,6 +678,12 @@ LogColors = ""
 #        Default: 0 - false - relocates player after being logged out in instance for more than 15 minutes or instance reset
 #                 1 - true - location is kept
 #
+#    Instance.StagesDir
+#        Directory of the dungeon stage files (<dungeon>.xml: the rooms bots clear before they go in, InstanceSubsystem),
+#        relative to the working directory; a dungeon's file is loaded when its first instance is created
+#        Default: "stages"
+#                 "" (no stages)
+#
 #    Quests.LowLevelHideDiff
 #        Quest level difference to hide for player low level quests:
 #        if player_level > quest_level + LowLevelQuestsHideDiff then quest "!" mark not show for quest giver
@@ -847,6 +853,7 @@ Instance.StrictCombatLockdown = 0
 Instance.ResetTimeHour = 4
 Instance.UnloadDelay = 1800000
 Instance.DisableRelocate = 0
+Instance.StagesDir = "stages"
 Quests.LowLevelHideDiff = 5
 Quests.HighLevelHideDiff = 7
 Quests.IgnoreRaid = 0

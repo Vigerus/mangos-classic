@@ -64,7 +64,8 @@ struct InstanceStageDef
 {
     std::string name;
     std::vector<InstanceStageBox> boxes;
-    std::vector<uint32> bosses;     // creature entries of the stage's bosses (optional, for display)
+    std::vector<uint32> bosses;     // creature entries of the stage's bosses; registration adds the encounter
+                                    // creatures (instance_encounters kill credit) spawned in the stage
     std::vector<InstanceStagePosition> positions;   // where bots stand once the stage is cleared (optional)
 
     bool Contains(float x, float y, float z) const
@@ -102,9 +103,19 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FOnPlayerLeaveMap, Player* /*player*/, Map*
  * short. Subscribing and unsubscribing from inside a callback is allowed.
  *
  * Stages: the rooms of a dungeon, so bots know which parts of an instance are cleared (boss progress alone does
- * not say). Registered once per map, usually from the instance script's constructor:
+ * not say). Registered once per map: LoadStages (DungeonMap constructor) reads the map's file of the
+ * Instance.StagesDir directory, stages/<dungeon>.xml, whose <root map="..."> attribute names the map:
  *
- *   instances->RegisterStages(instance->GetId(), { { "Entrance", { { minX, minY, minZ, maxX, maxY, maxZ } } }, ... });
+ *   <root map="289" name="Scholomance">
+ *     <stages>
+ *       <stage name="Reliquary" box="cx cy cz ex ey ez" clearposition="x y z" canbeenteredincombatifnotcleared="false"/>
+ *     </stages>
+ *     <readonly> navmesh floors, creature spawns: data for the tools of contrib/stages, not read here </readonly>
+ *   </root>
+ *
+ * box is the center and half extents of an axis aligned box; stages with the same name are one stage of several
+ * boxes; the first stage is the entrance. A stage containing an encounter creature (instance_encounters) is a boss
+ * stage. RegisterStages does the same from code.
  *
  * The creatures of a stage are the DB spawns (creature table) whose spawn point is inside one of its boxes, without
  * critters, uninteractible / invisible triggers and creatures friendly to players. In an instance a stage is cleared
@@ -134,6 +145,8 @@ class InstanceSubsystem : public WorldSubsystem
 
         // sets the stages of a map once (later calls for the same map are ignored), stage 0 is the entrance
         void RegisterStages(uint32 mapId, std::vector<InstanceStageDef> stages);
+        // registers the stages of the map's file in Instance.StagesDir, once (nothing without a file)
+        void LoadStages(uint32 mapId);
         bool HasStages(uint32 mapId) const;
         // the registered stages of a map, empty when there are none
         std::vector<InstanceStageDef> GetStages(uint32 mapId) const;
@@ -181,6 +194,9 @@ class InstanceSubsystem : public WorldSubsystem
         };
 
         std::shared_ptr<MapStages const> FindMapStages(uint32 mapId) const;
+        // map id -> stages file of Instance.StagesDir, on the first LoadStages
+        void IndexStageFiles();
+        static bool ReadStagesFile(std::string const& path, std::vector<InstanceStageDef>& stages);
         // the counted spawns of the map's stages, from the creature data
         static void CollectStageSpawns(uint32 mapId, MapStages& mapStages);
         static bool IsStageSpawnAlive(Map* map, StageSpawn const& spawn, time_t now);
@@ -196,6 +212,11 @@ class InstanceSubsystem : public WorldSubsystem
         std::vector<ObjectGuid> m_reportRequests;
         std::atomic<bool> m_hasReportRequests{false};
         std::atomic<uint32> m_reportSeq{0};
+
+        std::mutex m_fileLock;
+        bool m_filesIndexed = false;
+        std::unordered_map<uint32, std::string> m_stageFiles;
+        std::unordered_map<uint32, bool> m_loadedMaps;      // LoadStages ran for the map
 
         mutable std::mutex m_stageLock;
         std::unordered_map<uint32, std::shared_ptr<MapStages const>> m_mapStages;

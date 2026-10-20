@@ -26,39 +26,6 @@ EndScriptData
 #include "AI/ScriptDevAI/include/sc_common.h"
 #include "scholomance.h"
 #include "GameEvents/GameEventMgr.h"
-#include "Maps/InstanceSubsystem.h"
-#include "World/World.h"
-
-// rooms for the bots (InstanceSubsystem stages): boxes around the creature spawns of each room (minX minY minZ maxX maxY maxZ),
-// the boss entries (shown by the DungeonStage addon) and where bots stand once the room is cleared: x y z [class mask [spec]],
-// for now one spot for everyone (a creature spawn near the middle of the room); bots override it with rtsc.
-// Rough, check them in game with .instance stages
-static void RegisterScholomanceStages(uint32 mapId)
-{
-    InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>();
-    if (!instances || instances->HasStages(mapId))
-        return;
-
-    instances->RegisterStages(mapId,
-    {
-        { "Entrance",              { { 170.0f,  105.0f, 130.0f, 205.0f,  145.0f, 150.0f } } },
-        { "Entrance Hall",         { { 180.0f,   45.0f, 124.0f, 225.0f,  105.0f, 135.0f } }, {}, { { 198.4f, 64.3f, 128.5f } } },
-        { "Reliquary",             { { 150.0f,  -30.0f, 110.0f, 255.0f,   66.0f, 124.0f } }, {}, { { 209.4f, 12.4f, 115.8f } } },    // Blood Steward of Kirtonos (Kirtonos is summoned)
-        { "Chamber of Summoning",  { {  88.0f,   58.0f,  94.0f, 155.0f,  122.0f, 108.0f } }, { NPC_VECTUS, NPC_MARDUK_BLACKPOOL }, { { 112.7f, 86.2f, 99.7f } } },    // students
-        { "Great Ossuary",         { {  95.0f,  130.0f,  86.0f, 165.0f,  202.0f, 100.0f } }, { NPC_RATTLEGORE }, { { 137.1f, 171.7f, 96.0f } } },
-        { "Ossuary Balcony",       { {  98.0f,  142.0f, 105.0f, 162.0f,  192.0f, 114.0f } }, {}, { { 129.5f, 166.5f, 109.5f } } },    // handlers, hatchlings
-        { "Laboratory",            { { 172.0f,   66.0f, 100.0f, 228.0f,  110.0f, 108.0f } }, {}, { { 206.6f, 85.9f, 104.3f } } },    // Necrofiend, aberrations
-        { "Upper Halls",           { { 165.0f,   70.0f, 106.0f, 290.0f,  182.0f, 116.0f } }, { 14695 }, { { 230.1f, 140.3f, 109.7f } } },    // Lord Blackwood, summoners
-        { "Hall of the Damned",    { { 224.0f,   66.0f,  90.0f, 290.0f,  185.0f, 100.0f } }, { 10503 }, { { 256.4f, 124.7f, 95.9f } } },    // Jandice Barov
-        { "Ras Frostwhisper",      { { -35.0f,  120.0f,  78.0f,  50.0f,  168.0f,  92.0f } }, { NPC_RAS_FROSTWHISPER }, { { 21.9f, 157.0f, 83.6f } } },
-        { "Instructor Malicia",    { {  80.0f,  -14.0f,  82.0f, 132.0f,   14.0f,  92.0f } }, { NPC_INSTRUCTOR_MALICIA }, { { 112.9f, -4.5f, 85.5f } } },
-        { "The Ravenian",          { {  95.0f,  -20.0f,  70.0f, 136.0f,   17.0f,  80.0f } }, { NPC_RAVENIAN }, { { 130.4f, -1.1f, 75.5f } } },
-        { "Theolen Krastinov",     { { 165.0f, -100.0f,  80.0f, 198.0f,  -60.0f,  92.0f } }, { NPC_THEOLEN_KRASTINOV }, { { 180.7f, -75.8f, 84.9f } } },
-        { "Alexei Barov",          { { 168.0f,  -96.0f,  65.0f, 194.0f,  -52.0f,  80.0f } }, { NPC_ALEXEI_BAROV }, { { 183.1f, -88.0f, 70.9f } } },
-        { "Lorekeeper Polkelt",    { { 222.0f,  -22.0f,  80.0f, 282.0f,   16.0f,  92.0f } }, { NPC_LOREKEEPER_POLKELT }, { { 250.4f, -0.5f, 84.9f } } },
-        { "Illucia Barov",         { { 220.0f,   -6.0f,  68.0f, 272.0f,   14.0f,  80.0f } }, { NPC_ILLUCIA_BAROV }, { { 248.1f, 2.8f, 72.7f } } },
-    });
-}
 
 instance_scholomance::instance_scholomance(Map* pMap) : ScriptedInstance(pMap),
     m_uiGambitTransformTimer(0),
@@ -66,7 +33,6 @@ instance_scholomance::instance_scholomance(Map* pMap) : ScriptedInstance(pMap),
     m_bIsRoomReset(false)
 {
     Initialize();
-    RegisterScholomanceStages(pMap->GetId());
 }
 
 void instance_scholomance::Initialize()

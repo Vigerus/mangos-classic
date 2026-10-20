@@ -5,14 +5,15 @@ Watch the mangos build output and redeploy to a server instance.
 - Waits until the build output stops changing (linker finished).
 - Gracefully stops the affected server(s) (Ctrl+C on their console, hard kill after a timeout).
   realmd is only stopped when realmd itself changed.
-- Copies .exe + .pdb, and replaces SERVER_DIR/statetree with a fresh copy of the PlayerBots statetree.
+- Copies .exe + .pdb, and replaces SERVER_DIR/statetree and SERVER_DIR/stages with fresh copies of the PlayerBots
+  statetree and the dungeon stages (mangosd reads both only when it starts / a dungeon is first created).
 - Starts realmd first (if it was stopped / not running), then mangosd, each in its own console.
 
 Usage:
     python deploy_watch.py                 # watch forever
     python deploy_watch.py --once          # deploy if needed, then exit
     python deploy_watch.py --dry-run       # only report what would happen
-    python deploy_watch.py --watch-statetree   # also redeploy when only statetree files changed
+    python deploy_watch.py --watch-statetree   # also redeploy when only statetree / stages files changed
 """
 
 import argparse
@@ -28,8 +29,11 @@ from datetime import datetime
 
 BUILD_DIR = r"F:\progs\mangos\build\bin\x64_RelWithDebInfo"
 SERVER_DIR = r"F:\server\vanillanew"
-STATETREE_SRC = r"F:\progs\mangos\src\modules\PlayerBots\statetree"
-STATETREE_DST = os.path.join(SERVER_DIR, "statetree")
+# data directories copied with mangosd: (source, destination)
+DATA_DIRS = [
+    (r"F:\progs\mangos\src\modules\PlayerBots\statetree", os.path.join(SERVER_DIR, "statetree")),
+    (r"F:\progs\mangos\stages", os.path.join(SERVER_DIR, "stages")),     # Instance.StagesDir
+]
 
 # Start order; stop order is the reverse.
 SERVERS = ["realmd", "mangosd"]
@@ -110,11 +114,12 @@ def changed_servers():
     return changed
 
 
-def statetree_changed():
-    src, dst = tree_sig(STATETREE_SRC), tree_sig(STATETREE_DST)
-    if src.keys() != dst.keys():
-        return True
-    return any(differs(src[k], dst[k]) for k in src)
+def data_changed():
+    for src_dir, dst_dir in DATA_DIRS:
+        src, dst = tree_sig(src_dir), tree_sig(dst_dir)
+        if src.keys() != dst.keys() or any(differs(src[k], dst[k]) for k in src):
+            return True
+    return False
 
 
 def wait_for_stable_build(settle):
@@ -217,11 +222,15 @@ def copy_file(src, dst, retries=10):
     raise RuntimeError(f"could not copy {src} -> {dst}")
 
 
-def deploy_statetree():
-    log(f"  replacing {STATETREE_DST}")
-    if os.path.isdir(STATETREE_DST):
-        shutil.rmtree(STATETREE_DST)
-    shutil.copytree(STATETREE_SRC, STATETREE_DST)
+def deploy_data():
+    for src_dir, dst_dir in DATA_DIRS:
+        if not os.path.isdir(src_dir):
+            log(f"  warning: {src_dir} missing, {dst_dir} left as it is")
+            continue
+        log(f"  replacing {dst_dir}")
+        if os.path.isdir(dst_dir):
+            shutil.rmtree(dst_dir)
+        shutil.copytree(src_dir, dst_dir)
 
 
 # ---------------------------------------------------------------- main
@@ -232,7 +241,7 @@ def deploy(changed, args):
         log("  (dry run - nothing done)")
         return
 
-    # mangosd always goes down when statetree changes, since it only reads the trees on startup
+    # mangosd always goes down when statetree / stages change, since it only reads them on startup
     to_stop = [n for n in reversed(SERVERS) if n in changed]
 
     stopped = set()
@@ -249,7 +258,7 @@ def deploy(changed, args):
                 log(f"  copying {f}")
                 copy_file(src, os.path.join(SERVER_DIR, f))
         if name == "mangosd":
-            deploy_statetree()
+            deploy_data()
 
     for name in SERVERS:
         running = bool(find_processes(name))
@@ -260,15 +269,15 @@ def deploy(changed, args):
 
 def check(args):
     changed = changed_servers()
-    if args.watch_statetree and "mangosd" not in changed and statetree_changed():
-        log("statetree changed")
+    if args.watch_statetree and "mangosd" not in changed and data_changed():
+        log("statetree / stages changed")
         changed.append("mangosd")
     if not changed:
         return
     log(f"new build detected ({', '.join(changed)}), waiting {args.settle}s for build to settle...")
     wait_for_stable_build(args.settle)
     changed = changed_servers()  # re-evaluate after the build finished
-    if args.watch_statetree and "mangosd" not in changed and statetree_changed():
+    if args.watch_statetree and "mangosd" not in changed and data_changed():
         changed.append("mangosd")
     if changed:
         deploy(changed, args)
@@ -282,7 +291,7 @@ def main():
     ap.add_argument("--shutdown-timeout", type=float, default=120,
                     help="seconds to wait for a graceful shutdown before killing (default 120)")
     ap.add_argument("--watch-statetree", action="store_true",
-                    help="also redeploy mangosd when only statetree files changed")
+                    help="also redeploy mangosd when only statetree / stages files changed")
     ap.add_argument("--once", action="store_true", help="check once and exit")
     ap.add_argument("--dry-run", action="store_true", help="report only, do not stop/copy/start")
     args = ap.parse_args()

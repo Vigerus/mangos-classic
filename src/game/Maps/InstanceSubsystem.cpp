@@ -28,8 +28,16 @@
 #include "Server/WorldSession.h"
 #include "Chat/Chat.h"
 
+#include "Config/Config.h"
+
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/xml_parser.hpp>
+
 #include <algorithm>
 #include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <regex>
 #include <sstream>
 
 bool InstanceSubsystem::Remove(ObjectGuid player, FDelegateHandle handle)
@@ -115,6 +123,128 @@ void InstanceSubsystem::RegisterStages(uint32 mapId, std::vector<InstanceStageDe
         for (size_t i = 0; i < mapStages->stages.size(); ++i)
             sLog.outDetail("InstanceSubsystem: map %u stage %u '%s': %u creatures", mapId, uint32(i), mapStages->stages[i].name.c_str(), uint32(mapStages->spawns[i].size()));
     }
+}
+
+void InstanceSubsystem::LoadStages(uint32 mapId)
+{
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(m_fileLock);
+        if (m_loadedMaps[mapId])
+            return;
+        m_loadedMaps[mapId] = true;
+
+        IndexStageFiles();
+        auto itr = m_stageFiles.find(mapId);
+        if (itr == m_stageFiles.end())
+            return;
+        path = itr->second;
+    }
+
+    std::vector<InstanceStageDef> stages;
+    if (!ReadStagesFile(path, stages))
+        return;
+
+    sLog.outString("InstanceSubsystem: %u stages for map %u from %s", uint32(stages.size()), mapId, path.c_str());
+    RegisterStages(mapId, std::move(stages));
+}
+
+void InstanceSubsystem::IndexStageFiles()
+{
+    if (m_filesIndexed)
+        return;
+    m_filesIndexed = true;
+
+    std::string const directory = sConfig.GetStringDefault("Instance.StagesDir", "stages");
+    std::error_code error;
+    if (directory.empty())
+        return;
+    if (!std::filesystem::is_directory(directory, error))
+    {
+        sLog.outError("InstanceSubsystem: Instance.StagesDir '%s' is not a directory, no dungeon stages", directory.c_str());
+        return;
+    }
+
+    // the map from the root element at the top of the file; the rest (big readonly data) only when it is loaded
+    std::regex const mapPattern(R"re(<root[^>]*\smap="(\d+)")re");
+    for (auto const& entry : std::filesystem::directory_iterator(directory, error))
+    {
+        if (!entry.is_regular_file() || entry.path().extension() != ".xml")
+            continue;
+
+        std::ifstream file(entry.path());
+        std::string head(512, '\0');
+        file.read(&head[0], head.size());
+        head.resize(size_t(file.gcount()));
+
+        std::smatch match;
+        if (!std::regex_search(head, match, mapPattern))
+        {
+            sLog.outError("InstanceSubsystem: %s has no <root map=\"...\">, skipped", entry.path().string().c_str());
+            continue;
+        }
+
+        uint32 const mapId = uint32(std::stoul(match[1].str()));
+        if (!m_stageFiles.emplace(mapId, entry.path().string()).second)
+            sLog.outError("InstanceSubsystem: %s: map %u has another stages file, skipped", entry.path().string().c_str(), mapId);
+    }
+}
+
+bool InstanceSubsystem::ReadStagesFile(std::string const& path, std::vector<InstanceStageDef>& stages)
+{
+    namespace pt = boost::property_tree;
+    try
+    {
+        pt::ptree tree;
+        pt::read_xml(path, tree, pt::xml_parser::trim_whitespace);
+
+        std::unordered_map<std::string, size_t> byName;
+        for (auto const& node : tree.get_child("root.stages"))
+        {
+            if (node.first != "stage")
+                continue;
+
+            pt::ptree const& stage = node.second;
+            std::string const name = stage.get<std::string>("<xmlattr>.name");
+
+            float cx, cy, cz, ex, ey, ez;
+            std::istringstream box(stage.get<std::string>("<xmlattr>.box"));
+            if (!(box >> cx >> cy >> cz >> ex >> ey >> ez))
+                throw std::runtime_error("stage '" + name + "': box needs \"cx cy cz ex ey ez\"");
+
+            InstanceStageBox stageBox{ cx - ex, cy - ey, cz - ez, cx + ex, cy + ey, cz + ez };
+            stageBox.bCanBeEnteredInCombatIfNotCleared = stage.get<std::string>("<xmlattr>.canbeenteredincombatifnotcleared", "false") == "true";
+
+            // stages of the same name are one stage of several boxes
+            auto itr = byName.find(name);
+            if (itr == byName.end())
+            {
+                itr = byName.emplace(name, stages.size()).first;
+                InstanceStageDef def;
+                def.name = name;
+                stages.push_back(def);
+            }
+            InstanceStageDef& def = stages[itr->second];
+            def.boxes.push_back(stageBox);
+
+            std::string const clear = stage.get<std::string>("<xmlattr>.clearposition", "");
+            if (clear.find_first_not_of(" \t") != std::string::npos && def.positions.empty())
+            {
+                InstanceStagePosition position;
+                std::istringstream values(clear);
+                if (!(values >> position.x >> position.y >> position.z))
+                    throw std::runtime_error("stage '" + name + "': clearposition needs \"x y z\"");
+                def.positions.push_back(position);
+            }
+        }
+    }
+    catch (std::exception const& e)
+    {
+        sLog.outError("InstanceSubsystem: %s: %s, no stages", path.c_str(), e.what());
+        stages.clear();
+        return false;
+    }
+    return !stages.empty();
 }
 
 bool InstanceSubsystem::HasStages(uint32 mapId) const
@@ -380,8 +510,8 @@ void InstanceSubsystem::CollectStageSpawns(uint32 mapId, MapStages& mapStages)
         if (!info)
             return false;
 
-        // nothing the bots fight: critters, triggers, creatures friendly to players
-        if (info->CreatureType == CREATURE_TYPE_CRITTER || info->CreatureType == CREATURE_TYPE_NOT_SPECIFIED)
+        // nothing the bots fight: critters, triggers (uninteractible, invisible), creatures friendly to players
+        if (info->CreatureType == CREATURE_TYPE_CRITTER)
             return false;
         if ((info->UnitFlags & UNIT_FLAG_UNINTERACTIBLE) || (info->ExtraFlags & CREATURE_EXTRA_FLAG_INVISIBLE))
             return false;
@@ -400,6 +530,22 @@ void InstanceSubsystem::CollectStageSpawns(uint32 mapId, MapStages& mapStages)
         return false;
     };
     sObjectMgr.DoCreatureData(worker);
+
+    // boss stages: the encounter creatures (kill credit) spawned in them
+    std::vector<uint32> encounterCreatures;
+    DungeonEncounterMapBounds const encounters = sObjectMgr.GetDungeonEncounterBoundsByMap(mapId);
+    for (auto itr = encounters.first; itr != encounters.second; ++itr)
+        if (itr->second.creditType == ENCOUNTER_CREDIT_KILL_CREATURE)
+            encounterCreatures.push_back(itr->second.creditEntry);
+
+    for (size_t i = 0; i < mapStages.stages.size(); ++i)
+    {
+        std::vector<uint32>& bosses = mapStages.stages[i].bosses;
+        for (StageSpawn const& spawn : mapStages.spawns[i])
+            if (std::find(encounterCreatures.begin(), encounterCreatures.end(), spawn.entry) != encounterCreatures.end()
+                && std::find(bosses.begin(), bosses.end(), spawn.entry) == bosses.end())
+                bosses.push_back(spawn.entry);
+    }
 }
 
 bool InstanceSubsystem::IsStageSpawnAlive(Map* map, StageSpawn const& spawn, time_t now)
