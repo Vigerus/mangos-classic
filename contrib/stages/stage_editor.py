@@ -7,8 +7,11 @@ its name) and the editable stage boxes. Select a box in the list or by clicking 
 center, half extents, clear position and canbeenteredincombatifnotcleared on the right. Boxes with the same name are
 one stage; the first stage is the entrance, the order matters (a point belongs to the first stage containing it).
 
-Mouse: left drag rotates, middle drag (or ctrl + left) pans, wheel zooms. Save writes the file (the <readonly> section
-is kept as it is); closing the window with X discards the changes.
+Camera: W / S move along the view direction (also up / down when looking down), A / D sideways, Q / E
+straight down / up (Shift: faster), right drag rotates, middle drag pans, wheel zooms.
+Boxes: left click selects one; the selected box shows its corners: left drag a corner resizes the box over the floor
+(x / y, the opposite corner stays), Shift + left drag a corner changes its height (z).
+Save writes the file (the <readonly> section is kept as it is); closing the window with X discards the changes.
 """
 
 import colorsys
@@ -27,6 +30,8 @@ import stagelib  # noqa: E402
 MOB_RADIUS = 0.8
 MOB_HEIGHT = 2.2
 HOVER_PIXELS = 12
+HANDLE_PIXELS = 10
+FLY_SPEED = 0.6         # camera distances per second
 
 
 class StageBox:
@@ -67,14 +72,34 @@ def stage_color(name, alpha=1.0):
 
 class View(gl.GLViewWidget):
     hovered = QtCore.pyqtSignal(str, QtCore.QPoint)
-    clicked = QtCore.pyqtSignal(object, object)     # ray origin, direction (numpy)
+    clicked = QtCore.pyqtSignal(object, object)                 # ray origin, direction (numpy)
+    cornerDragged = QtCore.pyqtSignal(int, object, object, bool)   # corner, ray origin, direction, vertical
+    cornerReleased = QtCore.pyqtSignal()
+
+    MOVE_KEYS = {
+        QtCore.Qt.Key.Key_W: (1, 0, 0), QtCore.Qt.Key.Key_S: (-1, 0, 0),
+        QtCore.Qt.Key.Key_D: (0, 1, 0), QtCore.Qt.Key.Key_A: (0, -1, 0),
+        QtCore.Qt.Key.Key_E: (0, 0, 1), QtCore.Qt.Key.Key_Q: (0, 0, -1),
+    }
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMouseTracking(True)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.mob_points = np.zeros((0, 3))
         self.mob_names = []
+        self.handles = np.zeros((0, 3))     # corners of the selected box (set by the editor)
+        self.hovered_handle = -1
         self._press = None
+        self._last = None
+        self._drag_handle = -1
+        self._keys = set()
+        self._fly = QtCore.QTimer(self)
+        self._fly.setInterval(16)
+        self._fly.timeout.connect(self.fly)
+        self._fly_clock = QtCore.QElapsedTimer()
+
+    # -- math
 
     def mvp(self):
         m = self.projectionMatrix() * self.viewMatrix()
@@ -102,28 +127,101 @@ class View(gl.GLViewWidget):
         direction = far - near
         return near, direction / np.linalg.norm(direction)
 
-    def mousePressEvent(self, event):
-        self._press = event.position()
-        super().mousePressEvent(event)
+    def nearest(self, points, pos, pixels):
+        """Index of the projected point within pixels of pos, -1 when none."""
+        if not len(points):
+            return -1
+        screen, front = self.project(points)
+        distances = np.where(front, np.linalg.norm(screen - np.array([pos.x(), pos.y()]), axis=1), np.inf)
+        best = int(np.argmin(distances))
+        return best if distances[best] <= pixels else -1
 
-    def mouseReleaseEvent(self, event):
-        super().mouseReleaseEvent(event)
-        if self._press is not None and event.button() == QtCore.Qt.MouseButton.LeftButton:
-            if (event.position() - self._press).manhattanLength() < 4:
-                origin, direction = self.ray(event.position())
-                self.clicked.emit(origin, direction)
-        self._press = None
+    # -- camera: W A S D Q E fly, right drag orbits, middle drag pans
+
+    def keyPressEvent(self, event):
+        if event.key() in self.MOVE_KEYS:
+            if not event.isAutoRepeat():
+                self._keys.add(event.key())
+                if not self._fly.isActive():
+                    self._fly_clock.start()
+                    self._fly.start()
+            return
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):
+        if event.key() in self.MOVE_KEYS:
+            if not event.isAutoRepeat():
+                self._keys.discard(event.key())
+            return
+        super().keyReleaseEvent(event)
+
+    def focusOutEvent(self, event):
+        self._keys.clear()
+        super().focusOutEvent(event)
+
+    def fly(self):
+        seconds = self._fly_clock.restart() / 1000.0
+        if not self._keys:
+            self._fly.stop()
+            return
+        # W / S along the view direction (pitch included), A / D sideways, Q / E straight down / up
+        azimuth, elevation = math.radians(self.opts["azimuth"]), math.radians(self.opts["elevation"])
+        forward = -np.array([math.cos(elevation) * math.cos(azimuth), math.cos(elevation) * math.sin(azimuth), math.sin(elevation)])
+        right = np.array([-math.sin(azimuth), math.cos(azimuth), 0.0])
+        move = np.zeros(3)
+        for key in self._keys:
+            f, r, u = self.MOVE_KEYS[key]
+            move += forward * f + right * r + np.array([0.0, 0.0, u])
+        if not move.any():
+            return
+        speed = max(10.0, self.opts["distance"] * FLY_SPEED)
+        if QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier:
+            speed *= 3
+        step = move / np.linalg.norm(move) * speed * seconds
+        center = self.opts["center"]
+        self.opts["center"] = QtGui.QVector3D(center.x() + step[0], center.y() + step[1], center.z() + step[2])
+        self.update()
+
+    def mousePressEvent(self, event):
+        self.setFocus()
+        self._press = self._last = event.position()
+        self._drag_handle = -1
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self._drag_handle = self.nearest(self.handles, event.position(), HANDLE_PIXELS)
 
     def mouseMoveEvent(self, event):
-        super().mouseMoveEvent(event)
-        if event.buttons() != QtCore.Qt.MouseButton.NoButton or not len(self.mob_points):
+        pos = event.position()
+        buttons = event.buttons()
+        if self._last is not None and buttons != QtCore.Qt.MouseButton.NoButton:
+            dx, dy = pos.x() - self._last.x(), pos.y() - self._last.y()
+            self._last = pos
+            if buttons & QtCore.Qt.MouseButton.RightButton:
+                self.orbit(-dx * 0.4, dy * 0.4)
+            elif buttons & QtCore.Qt.MouseButton.MiddleButton:
+                self.pan(dx, dy, 0, relative="view-upright")
+            elif buttons & QtCore.Qt.MouseButton.LeftButton and self._drag_handle >= 0:
+                origin, direction = self.ray(pos)
+                vertical = bool(event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier)
+                self.cornerDragged.emit(self._drag_handle, origin, direction, vertical)
             return
-        screen, front = self.project(self.mob_points)
-        pos = np.array([event.position().x(), event.position().y()])
-        distances = np.where(front, np.linalg.norm(screen - pos, axis=1), np.inf)
-        best = int(np.argmin(distances))
-        text = self.mob_names[best] if distances[best] <= HOVER_PIXELS else ""
-        self.hovered.emit(text, event.globalPosition().toPoint())
+
+        # hover: corner handles, else creatures
+        handle = self.nearest(self.handles, pos, HANDLE_PIXELS)
+        if handle != self.hovered_handle:
+            self.hovered_handle = handle
+            self.setCursor(QtCore.Qt.CursorShape.SizeAllCursor if handle >= 0 else QtCore.Qt.CursorShape.ArrowCursor)
+        mob = self.nearest(self.mob_points, pos, HOVER_PIXELS) if handle < 0 else -1
+        self.hovered.emit(self.mob_names[mob] if mob >= 0 else "", event.globalPosition().toPoint())
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            if self._drag_handle >= 0:
+                self.cornerReleased.emit()
+            elif self._press is not None and (event.position() - self._press).manhattanLength() < 4:
+                origin, direction = self.ray(event.position())
+                self.clicked.emit(origin, direction)
+        self._press = self._last = None
+        self._drag_handle = -1
 
 
 class Editor(QtWidgets.QMainWindow):
@@ -136,6 +234,7 @@ class Editor(QtWidgets.QMainWindow):
         self.boxes = [StageBox.from_element(e) for e in (stages if stages is not None else []) if e.tag == "stage"]
         self.box_items = []
         self.updating = False
+        self.drag = None        # (dragged corner, opposite corner) while a corner is dragged
 
         self.setWindowTitle("Stage editor - %s (map %s)" % (self.root.get("name", ""), self.root.get("map", "?")))
         self.resize(1500, 900)
@@ -144,6 +243,8 @@ class Editor(QtWidgets.QMainWindow):
         self.view.setBackgroundColor((25, 25, 30))
         self.view.hovered.connect(self.on_hover)
         self.view.clicked.connect(self.on_click)
+        self.view.cornerDragged.connect(self.on_corner_drag)
+        self.view.cornerReleased.connect(self.on_corner_released)
 
         splitter = QtWidgets.QSplitter()
         splitter.addWidget(self.view)
@@ -155,6 +256,10 @@ class Editor(QtWidgets.QMainWindow):
         self.load_readonly()
         self.clear_item = gl.GLScatterPlotItem(pos=np.zeros((0, 3)), size=14, color=(1, 1, 1, 1))
         self.view.addItem(self.clear_item)
+        self.handle_item = gl.GLScatterPlotItem(pos=np.zeros((0, 3)), size=12, color=(1.0, 0.9, 0.2, 1.0))
+        self.handle_item.setGLOptions("translucent")
+        self.handle_item.setDepthValue(10)
+        self.view.addItem(self.handle_item)
         self.refresh_boxes()
         self.refresh_list()
         if self.boxes:
@@ -292,10 +397,67 @@ class Editor(QtWidgets.QMainWindow):
                                      antialias=True)
             self.view.addItem(item)
             self.box_items.append(item)
+        self.update_handles()
         clears = [b.clear for b in self.boxes if b.clear]
         colors = [(1, 1, 1, 1) if i == selected else stage_color(b.name) for i, b in enumerate(self.boxes) if b.clear]
         self.clear_item.setData(pos=np.array(clears) if clears else np.zeros((0, 3)),
                                 color=np.array(colors) if colors else (1, 1, 1, 1))
+
+    def update_handles(self):
+        """Corner handles of the selected box: index bits x, y, z (0 low, 1 high); the opposite corner is 7 - index."""
+        stage_box = self.current()
+        if stage_box is None:
+            corners = np.zeros((0, 3))
+        else:
+            lo, hi = stage_box.bounds()
+            corners = np.array([[(lo, hi)[xi][0], (lo, hi)[yi][1], (lo, hi)[zi][2]]
+                                for xi in (0, 1) for yi in (0, 1) for zi in (0, 1)])
+        self.view.handles = corners
+        self.handle_item.setData(pos=corners)
+
+    def on_corner_drag(self, index, origin, direction, vertical):
+        stage_box = self.current()
+        if stage_box is None or not len(self.view.handles):
+            return
+        # the corner and its opposite at the start of the drag: the box may flip over while dragging
+        if self.drag is None:
+            self.drag = (self.view.handles[index].copy(), self.view.handles[7 - index].copy())
+        corner, fixed = self.drag[0].copy(), self.drag[1]
+        if vertical:
+            # plane through the corner, upright, facing the camera: only the height changes
+            normal = np.array([direction[0], direction[1], 0.0])
+            if np.linalg.norm(normal) < 1e-6:
+                return
+            denominator = normal @ direction
+            if abs(denominator) < 1e-6:
+                return
+            t = normal @ (corner - origin) / denominator
+            corner[2] = (origin + direction * t)[2]
+        else:
+            # floor plane at the corner's height: x and y change
+            if abs(direction[2]) < 1e-6:
+                return
+            t = (corner[2] - origin[2]) / direction[2]
+            if t <= 0:
+                return
+            hit = origin + direction * t
+            corner[0], corner[1] = hit[0], hit[1]
+        center = (corner + fixed) / 2
+        extent = np.maximum(np.abs(corner - fixed) / 2, 0.5)
+        self.drag = (corner, fixed)
+        stage_box.box = [round(float(v), 1) for v in center] + [round(float(v), 1) for v in extent]
+        self.updating = True
+        for i in range(3):
+            self.center[i].setValue(stage_box.box[i])
+            self.extent[i].setValue(stage_box.box[i + 3])
+        self.updating = False
+        row = self.list.currentRow()
+        self.box_items[row].setData(pos=box_lines(stage_box))
+        self.handle_item.setData(pos=np.array([corner, fixed]))
+
+    def on_corner_released(self):
+        self.drag = None
+        self.on_select(self.list.currentRow())
 
     def refresh_list(self):
         row = self.list.currentRow()

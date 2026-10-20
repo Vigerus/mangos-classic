@@ -33,7 +33,7 @@ All scripts read the database and data paths from the server's `mangosd.conf` (`
 |--------|------|
 | `generate_stages.py` | creates the file of every dungeon / raid of `instance_template` that has none: stages from groups of creatures standing together (named after their boss, else their most common creature), in walking order from the entrance, plus the readonly data. `--map <id> --force` regenerates one (its stages are lost) |
 | `update_stagesstaticdata.py` | regenerates only the `<readonly>` sections (all files, or the files given); `<stages>` are kept |
-| `stage_editor.py <file>` | 3D editor: navmesh floors, creatures as cylinders (hover for the name), stage boxes; select a box in the list or click it, edit name, center, half extents, clear position, canbeenteredincombatifnotcleared; add / duplicate / delete / reorder boxes. Save writes the file, closing the window discards the changes |
+| `stage_editor.py <file>` | 3D editor: navmesh floors, creatures as cylinders (hover for the name), stage boxes; select a box in the list or click it, drag its corners (Shift: height) or edit name, center, half extents, clear position, canbeenteredincombatifnotcleared; add / duplicate / delete / reorder boxes. Camera: W / S fly along the view direction, A / D sideways, Q / E down / up (Shift faster), right drag rotates, middle drag pans, wheel zooms. Save writes the file, closing the window discards the changes |
 | `stagelib.py` | shared code: database, dbc, mmaps tile reader, floors, xml |
 
 `deploy_watch.py` copies `stages` next to `statetree` into the server directory. In game, `.instance stages` lists the
