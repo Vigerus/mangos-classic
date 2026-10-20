@@ -22,6 +22,7 @@
 #include "Server/WorldSession.h"
 #include "World/World.h"
 #include "Maps/InstanceSubsystem.h"
+#include "World/ProfilingSubsystem.h"
 #include "Server/Opcodes.h"
 #include "Globals/ObjectMgr.h"
 #include "Chat/Chat.h"
@@ -82,14 +83,19 @@ bool WorldSession::CheckChatMessage(std::string& msg, bool addon/* = false*/)
     return true;
 }
 
-// DungeonStage addon request ("BOT\tstages" addon message): answered by the InstanceSubsystem, also without a group
-static bool HandleStageReportRequest(Player* player, uint32 lang, std::string const& msg)
+// addon requests answered by the core, also without a group: DungeonStage ("BOT\tstages", InstanceSubsystem),
+// BotStateTree Telemetry tab ("BOT\ttelemetry", ProfilingSubsystem)
+static bool HandleCoreAddonRequest(Player* player, uint32 lang, std::string const& msg)
 {
     if (lang != LANG_ADDON)
         return false;
 
-    InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>();
-    return instances && instances->HandleStageReportRequest(player, msg);
+    if (InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>())
+        if (instances->HandleStageReportRequest(player, msg))
+            return true;
+
+    ProfilingSubsystem* profiling = sWorld.GetSubsystem<ProfilingSubsystem>();
+    return profiling && profiling->HandleReportRequest(player, msg);
 }
 
 void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
@@ -190,7 +196,7 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
             if (msg.empty())
                 break;
 
-            if (HandleStageReportRequest(_player, lang, msg))
+            if (HandleCoreAddonRequest(_player, lang, msg))
                 break;
 
             if (ChatHandler(this).ParseCommands(msg.c_str()))
@@ -248,7 +254,7 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
             if (msg.empty())
                 break;
 
-            if (HandleStageReportRequest(_player, lang, msg))
+            if (HandleCoreAddonRequest(_player, lang, msg))
                 break;
 
             if (ChatHandler(this).ParseCommands(msg.c_str()))
@@ -328,7 +334,7 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
             if (msg.empty())
                 break;
 
-            if (HandleStageReportRequest(_player, lang, msg))
+            if (HandleCoreAddonRequest(_player, lang, msg))
                 break;
 
             if (ChatHandler(this).ParseCommands(msg.c_str()))
@@ -442,7 +448,7 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
             if (msg.empty())
                 break;
 
-            if (HandleStageReportRequest(_player, lang, msg))
+            if (HandleCoreAddonRequest(_player, lang, msg))
                 break;
 
             if (ChatHandler(this).ParseCommands(msg.c_str()))

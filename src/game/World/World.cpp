@@ -87,6 +87,7 @@
 #include "Spells/SpellAuraWorldSubsystem.h"
 #include "Groups/TeamSubsystem.h"
 #include "Maps/InstanceSubsystem.h"
+#include "World/ProfilingSubsystem.h"
 
 #include <algorithm>
 #include <mutex>
@@ -153,6 +154,7 @@ World::World(): mail_timer(0), mail_timer_expires(0), m_NextWeeklyQuestReset(0),
     for (bool& m_configBoolValue : m_configBoolValues)
         m_configBoolValue = false;
 
+    RegisterSubsystem<ProfilingSubsystem>();
     RegisterSubsystem<SpellAuraWorldSubsystem>();
     RegisterSubsystem<TeamSubsystem>();
     RegisterSubsystem<InstanceSubsystem>();
