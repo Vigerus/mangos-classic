@@ -21,6 +21,7 @@
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
 #include "World/World.h"
+#include "Maps/InstanceSubsystem.h"
 #include "Server/Opcodes.h"
 #include "Globals/ObjectMgr.h"
 #include "Chat/Chat.h"
@@ -79,6 +80,16 @@ bool WorldSession::CheckChatMessage(std::string& msg, bool addon/* = false*/)
         }
     }
     return true;
+}
+
+// DungeonStage addon request ("BOT\tstages" addon message): answered by the InstanceSubsystem, also without a group
+static bool HandleStageReportRequest(Player* player, uint32 lang, std::string const& msg)
+{
+    if (lang != LANG_ADDON)
+        return false;
+
+    InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>();
+    return instances && instances->HandleStageReportRequest(player, msg);
 }
 
 void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
@@ -179,6 +190,9 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
             if (msg.empty())
                 break;
 
+            if (HandleStageReportRequest(_player, lang, msg))
+                break;
+
             if (ChatHandler(this).ParseCommands(msg.c_str()))
                 break;
 
@@ -232,6 +246,9 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
             recv_data >> msg;
 
             if (msg.empty())
+                break;
+
+            if (HandleStageReportRequest(_player, lang, msg))
                 break;
 
             if (ChatHandler(this).ParseCommands(msg.c_str()))
@@ -309,6 +326,9 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
                 recv_data >> msg;
 
             if (msg.empty())
+                break;
+
+            if (HandleStageReportRequest(_player, lang, msg))
                 break;
 
             if (ChatHandler(this).ParseCommands(msg.c_str()))
@@ -420,6 +440,9 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket& recv_data)
                 recv_data >> msg;
 
             if (msg.empty())
+                break;
+
+            if (HandleStageReportRequest(_player, lang, msg))
                 break;
 
             if (ChatHandler(this).ParseCommands(msg.c_str()))

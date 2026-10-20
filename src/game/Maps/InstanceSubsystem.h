@@ -156,6 +156,14 @@ class InstanceSubsystem : public WorldSubsystem
         // called by Map when it is destroyed: drops the remembered state of the instance
         void ForgetInstance(uint32 mapId, uint32 instanceId);
 
+        // ---- DungeonStage addon report
+
+        // the addon request "BOT\tstages" (addon message on any chat channel, also without a group), from the chat
+        // handler (world thread); answered on the player's map thread by UpdateMap. True when msg was the request.
+        bool HandleStageReportRequest(Player* player, std::string const& msg);
+        // called by Map::Update: answers the requests of the players on the map
+        void UpdateMap(Map* map);
+
         virtual void Deinitialize() override;
 
     private:
@@ -178,6 +186,16 @@ class InstanceSubsystem : public WorldSubsystem
         static bool IsStageSpawnAlive(Map* map, StageSpawn const& spawn, time_t now);
 
         static uint64 InstanceKey(uint32 mapId, uint32 instanceId) { return (uint64(mapId) << 32) | instanceId; }
+
+        // "BOTDS\tS<seq>:<index>/<count>:<payload part>" addon messages to the player:
+        //   M^<map id>^<instance id>^<stage of the player or -1>
+        //   G^<stage>^<name>^<cleared 0|1>^<alive>^<total>^<alive boss name,...>
+        void SendStageReport(Player* player, Map* map);
+
+        std::mutex m_reportLock;
+        std::vector<ObjectGuid> m_reportRequests;
+        std::atomic<bool> m_hasReportRequests{false};
+        std::atomic<uint32> m_reportSeq{0};
 
         mutable std::mutex m_stageLock;
         std::unordered_map<uint32, std::shared_ptr<MapStages const>> m_mapStages;

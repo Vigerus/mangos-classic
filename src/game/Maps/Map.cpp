@@ -712,6 +712,10 @@ void Map::Update(const uint32& t_diff)
 
     m_curTime = time(nullptr);
 
+    // DungeonStage addon requests of the players on this map
+    if (InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>())
+        instances->UpdateMap(this);
+
 #ifdef _MSC_VER
     localtime_s(&m_curTimeTm, &m_curTime);
 #else

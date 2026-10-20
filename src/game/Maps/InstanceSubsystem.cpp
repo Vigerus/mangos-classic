@@ -24,9 +24,13 @@
 #include "Maps/Map.h"
 #include "Maps/MapPersistentStateMgr.h"
 #include "Server/DBCStores.h"
+#include "Server/WorldPacket.h"
+#include "Server/WorldSession.h"
+#include "Chat/Chat.h"
 
 #include <algorithm>
 #include <ctime>
+#include <sstream>
 
 bool InstanceSubsystem::Remove(ObjectGuid player, FDelegateHandle handle)
 {
@@ -269,6 +273,90 @@ void InstanceSubsystem::ForgetInstance(uint32 mapId, uint32 instanceId)
 {
     std::lock_guard<std::mutex> lock(m_stageLock);
     m_clearedStages.erase(InstanceKey(mapId, instanceId));
+}
+
+// ---------------------------------------------------------------- DungeonStage addon report
+
+bool InstanceSubsystem::HandleStageReportRequest(Player* player, std::string const& msg)
+{
+    if (msg.rfind("BOT\tstages", 0) != 0)
+        return false;
+
+    if (player)
+    {
+        std::lock_guard<std::mutex> lock(m_reportLock);
+        if (std::find(m_reportRequests.begin(), m_reportRequests.end(), player->GetObjectGuid()) == m_reportRequests.end())
+            m_reportRequests.push_back(player->GetObjectGuid());
+        m_hasReportRequests = true;
+    }
+    return true;
+}
+
+void InstanceSubsystem::UpdateMap(Map* map)
+{
+    if (!m_hasReportRequests)
+        return;
+
+    std::vector<Player*> players;
+    {
+        std::lock_guard<std::mutex> lock(m_reportLock);
+        for (auto itr = m_reportRequests.begin(); itr != m_reportRequests.end();)
+        {
+            if (Player* player = map->GetPlayer(*itr))
+            {
+                players.push_back(player);
+                itr = m_reportRequests.erase(itr);
+            }
+            else
+                ++itr;
+        }
+        m_hasReportRequests = !m_reportRequests.empty();
+    }
+
+    for (Player* player : players)
+        SendStageReport(player, map);
+}
+
+void InstanceSubsystem::SendStageReport(Player* player, Map* map)
+{
+    if (!player->IsInWorld() || !player->GetSession())
+        return;
+
+    std::vector<InstanceStageDef> const stages = GetStages(map->GetId());
+    int32 const current = FindStage(map->GetId(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
+
+    std::ostringstream payload;
+    payload << "M^" << map->GetId() << "^" << map->GetInstanceId() << "^" << current;
+    for (uint32 i = 0; i < stages.size(); ++i)
+    {
+        InstanceStageState const state = GetStageState(map, i);
+        payload << "~G^" << i << "^" << stages[i].name << "^" << (state.cleared ? 1 : 0) << "^" << state.alive << "^" << state.total << "^";
+
+        bool first = true;
+        for (uint32 entry : GetStageAliveBosses(map, i))
+        {
+            if (CreatureInfo const* info = ObjectMgr::GetCreatureTemplate(entry))
+            {
+                payload << (first ? "" : ",") << info->Name;
+                first = false;
+            }
+        }
+    }
+
+    // addon messages are limited to 255 chars: chunks, sent as party addon messages from the player itself
+    size_t const chunkSize = 220;
+    std::string const text = payload.str();
+    size_t const count = std::max<size_t>(1, (text.size() + chunkSize - 1) / chunkSize);
+    uint32 const seq = ++m_reportSeq % 256;
+    for (size_t i = 0; i < count; ++i)
+    {
+        std::ostringstream chunk;
+        chunk << "BOTDS\tS" << seq << ":" << (i + 1) << "/" << count << ":" << text.substr(i * chunkSize, chunkSize);
+
+        WorldPacket data;
+        ChatHandler::BuildChatPacket(data, CHAT_MSG_PARTY, chunk.str().c_str(), LANG_ADDON, CHAT_TAG_NONE, player->GetObjectGuid(), player->GetName());
+        player->GetSession()->SendPacket(data);
+    }
 }
 
 std::shared_ptr<InstanceSubsystem::MapStages const> InstanceSubsystem::FindMapStages(uint32 mapId) const
