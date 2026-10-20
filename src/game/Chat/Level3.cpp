@@ -49,6 +49,8 @@
 #include "BattleGround/BattleGroundMgr.h"
 #include "Maps/MapPersistentStateMgr.h"
 #include "Maps/InstanceData.h"
+#include "Maps/InstanceSubsystem.h"
+#include "MotionGenerators/MotionMaster.h"
 #include "Server/DBCStores.h"
 #include "AI/EventAI/CreatureEventAIMgr.h"
 #include "Server/SQLStorages.h"
@@ -6146,6 +6148,126 @@ bool ChatHandler::HandleInstanceSaveDataCommand(char* /*args*/)
     }
 
     iData->SaveToDB();
+    return true;
+}
+
+// .instance stages [#stage | show [#stage]]: the stages of the map (InstanceSubsystem), cleared / alive per stage and the
+// one you stand in; with a stage index the creatures of that stage still alive; show marks a stage's boxes in the world
+bool ChatHandler::HandleInstanceStagesCommand(char* args)
+{
+    Player* player = m_session->GetPlayer();
+    Map* map = player->GetMap();
+    InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>();
+    if (!instances || !instances->HasStages(map->GetId()))
+    {
+        PSendSysMessage("Map %u has no stages.", map->GetId());
+        SetSentErrorMessage(true);
+        return false;
+    }
+
+    std::vector<InstanceStageDef> const stages = instances->GetStages(map->GetId());
+    int32 const current = instances->FindStage(map->GetId(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
+
+    // ".instance stages show [#stage]": marks the edges of the stage's boxes (yours without a stage) with waypoint
+    // markers and its positions with spotlights, for a minute
+    if (ExtractLiteralArg(&args, "show"))
+    {
+        uint32 stage;
+        if (!ExtractUInt32(&args, stage))
+        {
+            if (current < 0)
+            {
+                PSendSysMessage("You are in no stage, give its index.");
+                SetSentErrorMessage(true);
+                return false;
+            }
+            stage = uint32(current);
+        }
+        if (stage >= stages.size())
+        {
+            PSendSysMessage("Stage %u does not exist (%u stages).", stage, uint32(stages.size()));
+            SetSentErrorMessage(true);
+            return false;
+        }
+
+        uint32 const duration = 60 * IN_MILLISECONDS;
+        float const step = 4.0f;
+        uint32 markers = 0;
+        auto mark = [&](uint32 entry, float x, float y, float z)
+        {
+            if (player->SummonCreature(entry, x, y, z, 0.0f, TEMPSPAWN_TIMED_DESPAWN, duration))
+                ++markers;
+        };
+        // the 12 edges of each box
+        auto edge = [&](float x1, float y1, float z1, float x2, float y2, float z2)
+        {
+            float const length = sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1) + (z2 - z1) * (z2 - z1));
+            uint32 const points = std::max(1u, uint32(length / step));
+            for (uint32 i = 0; i <= points; ++i)
+            {
+                float const t = float(i) / points;
+                mark(VISUAL_WAYPOINT, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, z1 + (z2 - z1) * t);
+            }
+        };
+        for (InstanceStageBox const& box : stages[stage].boxes)
+        {
+            for (float z : { box.minZ, box.maxZ })
+            {
+                edge(box.minX, box.minY, z, box.maxX, box.minY, z);
+                edge(box.minX, box.maxY, z, box.maxX, box.maxY, z);
+                edge(box.minX, box.minY, z, box.minX, box.maxY, z);
+                edge(box.maxX, box.minY, z, box.maxX, box.maxY, z);
+            }
+            for (float x : { box.minX, box.maxX })
+                for (float y : { box.minY, box.maxY })
+                    edge(x, y, box.minZ, x, y, box.maxZ);
+        }
+        for (InstanceStagePosition const& position : stages[stage].positions)
+            mark(15631, position.x, position.y, position.z);    // spotlight (rtsc marker)
+
+        PSendSysMessage("Stage %u '%s': %u boxes, %u positions, %u markers for 60s.", stage, stages[stage].name.c_str(),
+            uint32(stages[stage].boxes.size()), uint32(stages[stage].positions.size()), markers);
+        for (InstanceStageBox const& box : stages[stage].boxes)
+            PSendSysMessage("  box %.1f %.1f %.1f - %.1f %.1f %.1f%s", box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ,
+                box.bCanBeEnteredInCombatIfNotCleared ? " (can be entered in combat)" : "");
+        return true;
+    }
+
+    uint32 stage;
+    if (ExtractUInt32(&args, stage))
+    {
+        if (stage >= stages.size())
+        {
+            PSendSysMessage("Stage %u does not exist (%u stages).", stage, uint32(stages.size()));
+            SetSentErrorMessage(true);
+            return false;
+        }
+
+        std::vector<uint32> const alive = instances->GetStageAliveCreatures(map, stage);
+        PSendSysMessage("Stage %u '%s': %u alive", stage, stages[stage].name.c_str(), uint32(alive.size()));
+        for (uint32 dbGuid : alive)
+        {
+            if (Creature* creature = map->GetCreature(dbGuid))
+                PSendSysMessage("  %s [%u] %.1f %.1f %.1f", creature->GetName(), dbGuid, creature->GetPositionX(), creature->GetPositionY(), creature->GetPositionZ());
+            else if (CreatureData const* data = sObjectMgr.GetCreatureData(dbGuid))
+            {
+                CreatureInfo const* info = ObjectMgr::GetCreatureTemplate(data->id);
+                PSendSysMessage("  %s [%u] %.1f %.1f %.1f (not loaded)", info ? info->Name : "?", dbGuid, data->posX, data->posY, data->posZ);
+            }
+        }
+        return true;
+    }
+
+    PSendSysMessage("Map %u instance %u: %u stages, you are at %.1f %.1f %.1f", map->GetId(), map->GetInstanceId(), uint32(stages.size()),
+        player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
+    for (uint32 i = 0; i < stages.size(); ++i)
+    {
+        InstanceStageState const state = instances->GetStageState(map, i);
+        PSendSysMessage("%s%u '%s': %s, %u / %u alive", int32(i) == current ? "> " : "  ", i, stages[i].name.c_str(),
+            state.cleared ? "cleared" : "not cleared", state.alive, state.total);
+    }
+    if (current < 0)
+        PSendSysMessage("You are in no stage.");
     return true;
 }
 

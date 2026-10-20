@@ -17,7 +17,16 @@
  */
 
 #include "Maps/InstanceSubsystem.h"
+#include "Entities/Creature.h"
 #include "Entities/Player.h"
+#include "Globals/ObjectMgr.h"
+#include "Log/Log.h"
+#include "Maps/Map.h"
+#include "Maps/MapPersistentStateMgr.h"
+#include "Server/DBCStores.h"
+
+#include <algorithm>
+#include <ctime>
 
 bool InstanceSubsystem::Remove(ObjectGuid player, FDelegateHandle handle)
 {
@@ -73,9 +82,249 @@ void InstanceSubsystem::BroadcastPlayerLeaveMap(Player* player, Map* map)
 
 void InstanceSubsystem::Deinitialize()
 {
-    std::lock_guard<std::recursive_mutex> lock(m_lock);
-    m_players.clear();
-    m_hasPlayers = false;
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_lock);
+        m_players.clear();
+        m_hasPlayers = false;
+    }
+
+    std::lock_guard<std::mutex> lock(m_stageLock);
+    m_mapStages.clear();
+    m_clearedStages.clear();
+}
+
+// ---------------------------------------------------------------- stages
+
+void InstanceSubsystem::RegisterStages(uint32 mapId, std::vector<InstanceStageDef> stages)
+{
+    if (stages.empty() || HasStages(mapId))
+        return;
+
+    // collected outside the lock: the creature data is read only at runtime
+    auto mapStages = std::make_shared<MapStages>();
+    mapStages->stages = std::move(stages);
+    CollectStageSpawns(mapId, *mapStages);
+
+    std::lock_guard<std::mutex> lock(m_stageLock);
+    if (m_mapStages.emplace(mapId, mapStages).second)
+    {
+        for (size_t i = 0; i < mapStages->stages.size(); ++i)
+            sLog.outDetail("InstanceSubsystem: map %u stage %u '%s': %u creatures", mapId, uint32(i), mapStages->stages[i].name.c_str(), uint32(mapStages->spawns[i].size()));
+    }
+}
+
+bool InstanceSubsystem::HasStages(uint32 mapId) const
+{
+    return FindMapStages(mapId) != nullptr;
+}
+
+std::vector<InstanceStageDef> InstanceSubsystem::GetStages(uint32 mapId) const
+{
+    std::shared_ptr<MapStages const> mapStages = FindMapStages(mapId);
+    return mapStages ? mapStages->stages : std::vector<InstanceStageDef>();
+}
+
+int32 InstanceSubsystem::FindStage(uint32 mapId, float x, float y, float z) const
+{
+    std::shared_ptr<MapStages const> mapStages = FindMapStages(mapId);
+    if (!mapStages)
+        return -1;
+
+    for (size_t i = 0; i < mapStages->stages.size(); ++i)
+        if (mapStages->stages[i].Contains(x, y, z))
+            return int32(i);
+    return -1;
+}
+
+bool InstanceSubsystem::GetStagePosition(uint32 mapId, uint32 stage, uint8 classId, int32 spec, float& x, float& y, float& z) const
+{
+    std::shared_ptr<MapStages const> mapStages = FindMapStages(mapId);
+    if (!mapStages || stage >= mapStages->stages.size() || !classId)
+        return false;
+
+    uint32 const classBit = 1 << (classId - 1);
+    InstanceStagePosition const* best = nullptr;
+    int32 bestScore = -1;
+    for (InstanceStagePosition const& position : mapStages->stages[stage].positions)
+    {
+        if ((position.classMask && !(position.classMask & classBit)) || (position.spec >= 0 && position.spec != spec))
+            continue;
+
+        int32 const score = (position.classMask ? 2 : 0) + (position.spec >= 0 ? 1 : 0);
+        if (score > bestScore)
+        {
+            best = &position;
+            bestScore = score;
+        }
+    }
+
+    if (!best)
+        return false;
+
+    x = best->x;
+    y = best->y;
+    z = best->z;
+    return true;
+}
+
+InstanceStageState InstanceSubsystem::GetStageState(Map* map, uint32 stage)
+{
+    InstanceStageState state;
+    if (!map)
+        return state;
+
+    std::shared_ptr<MapStages const> mapStages = FindMapStages(map->GetId());
+    if (!mapStages || stage >= mapStages->stages.size())
+        return state;
+
+    std::vector<StageSpawn> const& spawns = mapStages->spawns[stage];
+    state.total = uint32(spawns.size());
+
+    time_t const now = time(nullptr);
+    for (StageSpawn const& spawn : spawns)
+        if (IsStageSpawnAlive(map, spawn, now))
+            ++state.alive;
+
+    uint64 const key = InstanceKey(map->GetId(), map->GetInstanceId());
+    std::lock_guard<std::mutex> lock(m_stageLock);
+    std::vector<bool>& cleared = m_clearedStages[key];
+    if (cleared.size() < mapStages->stages.size())
+        cleared.resize(mapStages->stages.size(), false);
+
+    if (stage == 0 || state.alive == 0)
+        cleared[stage] = true;
+    state.cleared = cleared[stage];
+    return state;
+}
+
+bool InstanceSubsystem::IsEntryBlocked(Map* map, float x, float y, float z, bool inCombat, int32 exceptStage)
+{
+    if (!map)
+        return false;
+
+    std::shared_ptr<MapStages const> mapStages = FindMapStages(map->GetId());
+    if (!mapStages)
+        return false;
+
+    for (size_t i = 1; i < mapStages->stages.size(); ++i)      // stage 0 is always cleared
+    {
+        if (int32(i) == exceptStage)
+            continue;
+
+        for (InstanceStageBox const& box : mapStages->stages[i].boxes)
+        {
+            if (!box.Contains(x, y, z) || (inCombat && box.bCanBeEnteredInCombatIfNotCleared))
+                continue;
+
+            if (!IsStageCleared(map, uint32(i)))
+                return true;
+            break;      // the other boxes of a cleared stage do not block either
+        }
+    }
+    return false;
+}
+
+std::vector<uint32> InstanceSubsystem::GetStageAliveCreatures(Map* map, uint32 stage)
+{
+    std::vector<uint32> alive;
+    if (!map)
+        return alive;
+
+    std::shared_ptr<MapStages const> mapStages = FindMapStages(map->GetId());
+    if (!mapStages || stage >= mapStages->stages.size())
+        return alive;
+
+    time_t const now = time(nullptr);
+    for (StageSpawn const& spawn : mapStages->spawns[stage])
+    {
+        if (IsStageSpawnAlive(map, spawn, now))
+            alive.push_back(spawn.dbGuid);
+    }
+    return alive;
+}
+
+std::vector<uint32> InstanceSubsystem::GetStageAliveBosses(Map* map, uint32 stage)
+{
+    std::vector<uint32> alive;
+    if (!map)
+        return alive;
+
+    std::shared_ptr<MapStages const> mapStages = FindMapStages(map->GetId());
+    if (!mapStages || stage >= mapStages->stages.size())
+        return alive;
+
+    std::vector<uint32> const& bosses = mapStages->stages[stage].bosses;
+    time_t const now = time(nullptr);
+    for (StageSpawn const& spawn : mapStages->spawns[stage])
+    {
+        if (std::find(bosses.begin(), bosses.end(), spawn.entry) == bosses.end())
+            continue;
+        if (std::find(alive.begin(), alive.end(), spawn.entry) == alive.end() && IsStageSpawnAlive(map, spawn, now))
+            alive.push_back(spawn.entry);
+    }
+    return alive;
+}
+
+void InstanceSubsystem::ForgetInstance(uint32 mapId, uint32 instanceId)
+{
+    std::lock_guard<std::mutex> lock(m_stageLock);
+    m_clearedStages.erase(InstanceKey(mapId, instanceId));
+}
+
+std::shared_ptr<InstanceSubsystem::MapStages const> InstanceSubsystem::FindMapStages(uint32 mapId) const
+{
+    std::lock_guard<std::mutex> lock(m_stageLock);
+    auto itr = m_mapStages.find(mapId);
+    return itr != m_mapStages.end() ? itr->second : nullptr;
+}
+
+void InstanceSubsystem::CollectStageSpawns(uint32 mapId, MapStages& mapStages)
+{
+    mapStages.spawns.assign(mapStages.stages.size(), {});
+
+    auto worker = [&](CreatureDataPair const& pair) -> bool
+    {
+        CreatureData const& data = pair.second;
+        if (data.mapid != mapId)
+            return false;
+
+        CreatureInfo const* info = ObjectMgr::GetCreatureTemplate(data.id);
+        if (!info)
+            return false;
+
+        // nothing the bots fight: critters, triggers, creatures friendly to players
+        if (info->CreatureType == CREATURE_TYPE_CRITTER || info->CreatureType == CREATURE_TYPE_NOT_SPECIFIED)
+            return false;
+        if ((info->UnitFlags & UNIT_FLAG_UNINTERACTIBLE) || (info->ExtraFlags & CREATURE_EXTRA_FLAG_INVISIBLE))
+            return false;
+        if (FactionTemplateEntry const* faction = sFactionTemplateStore.LookupEntry(info->Faction))
+            if (faction->friendGroupMask & FACTION_GROUP_MASK_PLAYER)
+                return false;
+
+        for (size_t i = 1; i < mapStages.stages.size(); ++i)        // stage 0 counts nothing
+        {
+            if (mapStages.stages[i].Contains(data.posX, data.posY, data.posZ))
+            {
+                mapStages.spawns[i].push_back({ pair.first, data.id, data.posX, data.posY });
+                break;
+            }
+        }
+        return false;
+    };
+    sObjectMgr.DoCreatureData(worker);
+}
+
+bool InstanceSubsystem::IsStageSpawnAlive(Map* map, StageSpawn const& spawn, time_t now)
+{
+    if (Creature* creature = map->GetCreature(spawn.dbGuid))     // prefers a living one
+        return creature->IsAlive();
+
+    // not in the map: killed and removed or not spawned while its grid is loaded, else waiting for the grid
+    if (map->IsLoaded(spawn.x, spawn.y))
+        return false;
+
+    MapPersistentState* state = map->GetPersistentState();
+    return !state || state->GetCreatureRespawnTime(spawn.dbGuid) <= now;
 }
 
 void InstanceSubsystem::CleanupPlayer(PlayerMap::iterator itr)

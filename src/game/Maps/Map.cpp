@@ -66,6 +66,10 @@ Map::~Map()
     delete i_data;
     i_data = nullptr;
 
+    if (IsDungeon())
+        if (InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>())
+            instances->ForgetInstance(GetId(), GetInstanceId());
+
     // unload instance specific navigation data
     MMAP::MMapFactory::createOrGetMMapManager()->unloadMapInstance(m_TerrainData->GetMapId(), GetInstanceId());
 
