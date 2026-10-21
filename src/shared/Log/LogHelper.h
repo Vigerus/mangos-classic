@@ -68,9 +68,15 @@ namespace Mangos
    };
 }
 
-#define CCLOG_TRACE(logger) Mangos::LogWriter(logger, &log4cxx::Logger::isTraceEnabled, &::log4cxx::Level::getTrace, __FILE__, __LINE__, __FUNCTION__)
-#define CCLOG_DEBUG(logger) Mangos::LogWriter(logger, &log4cxx::Logger::isDebugEnabled, &::log4cxx::Level::getDebug, __FILE__, __LINE__, __FUNCTION__)
-#define CCLOG_INFO(logger) Mangos::LogWriter(logger, &log4cxx::Logger::isInfoEnabled, &::log4cxx::Level::getInfo, __FILE__, __LINE__, __FUNCTION__)
-#define CCLOG_WARN(logger) Mangos::LogWriter(logger, &log4cxx::Logger::isWarnEnabled, &::log4cxx::Level::getWarn, __FILE__, __LINE__, __FUNCTION__)
-#define CCLOG_ERROR(logger) Mangos::LogWriter(logger, &log4cxx::Logger::isErrorEnabled, &::log4cxx::Level::getError, __FILE__, __LINE__, __FUNCTION__)
-#define CCLOG_FATAL(logger) Mangos::LogWriter(logger, &log4cxx::Logger::isFatalEnabled, &::log4cxx::Level::getFatal, __FILE__, __LINE__, __FUNCTION__)
+// the writer (strings, message buffer, formatting of the streamed values) is only built when the level is enabled;
+// a statement: CCLOG_TRACE(logger) << ... ;
+#define CCLOG_WRITE(logger, isEnabled, getLevel) \
+    if (!LOG4CXX_UNLIKELY((logger)->isEnabled())) {} \
+    else Mangos::LogWriter(logger, &log4cxx::Logger::isEnabled, &::log4cxx::Level::getLevel, __FILE__, __LINE__, __FUNCTION__)
+
+#define CCLOG_TRACE(logger) CCLOG_WRITE(logger, isTraceEnabled, getTrace)
+#define CCLOG_DEBUG(logger) CCLOG_WRITE(logger, isDebugEnabled, getDebug)
+#define CCLOG_INFO(logger) CCLOG_WRITE(logger, isInfoEnabled, getInfo)
+#define CCLOG_WARN(logger) CCLOG_WRITE(logger, isWarnEnabled, getWarn)
+#define CCLOG_ERROR(logger) CCLOG_WRITE(logger, isErrorEnabled, getError)
+#define CCLOG_FATAL(logger) CCLOG_WRITE(logger, isFatalEnabled, getFatal)

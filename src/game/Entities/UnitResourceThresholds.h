@@ -95,6 +95,9 @@ class UnitResourceThresholds
         // percent of power (0 while the unit has no max power of that type) compared to percent
         Condition& WatchPower(Powers power, float percent, EResourceCompare compare);
 
+        // fired after any condition's onSwitched (for listeners of every condition, e.g. a bot's reaction engine)
+        FOnResourceConditionSwitched onAnySwitched;
+
     private:
         Condition& Watch(bool health, Powers power, float percent, EResourceCompare compare);
 

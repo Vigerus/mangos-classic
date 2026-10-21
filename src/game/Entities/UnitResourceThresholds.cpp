@@ -112,6 +112,7 @@ void UnitResourceThresholds::Update(Condition& condition)
 
     condition.m_active = active;
     condition.onSwitched.Broadcast(active);
+    onAnySwitched.Broadcast(active);
 }
 
 float UnitResourceThresholds::GetPercent(const Condition& condition) const
