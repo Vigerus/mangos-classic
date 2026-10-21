@@ -52,6 +52,7 @@
 #include "Anticheat/Anticheat.hpp"
 #include "Spells/SpellStacking.h"
 #include "Spells/SpellAuraWorldSubsystem.h"
+#include "Groups/TeamSubsystem.h"
 #include "Log/LogHelper.h"
 
 #ifdef BUILD_METRICS
@@ -7956,7 +7957,13 @@ void Unit::SetInCombatState(bool PvP, Unit* enemy)
                 InterruptSpell(CurrentSpellTypes(i), false);
 
     if (notInCombat)
+    {
         GetCombatManager().OnCombatStart();
+
+        if (GetTypeId() == TYPEID_PLAYER)
+            if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+                teams->BroadcastCombatStarted(static_cast<Player*>(this));
+    }
 
     if (creatureNotInCombat)
     {
@@ -8033,11 +8040,46 @@ void Unit::EngageInCombatWithAggressor(Unit* aggressor)
 
 void Unit::ClearInCombat()
 {
+    bool const wasInCombat = HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IN_COMBAT);
+
     RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_IN_COMBAT);
     RemoveFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PET_IN_COMBAT);
 
     if (GetTypeId() == TYPEID_PLAYER)
         static_cast<Player*>(this)->pvpInfo.inPvPCombat = false;
+
+    if (wasInCombat && GetTypeId() == TYPEID_PLAYER)
+        if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+            teams->BroadcastCombatEnded(static_cast<Player*>(this));
+}
+
+void Unit::addHatedBy(HostileReference* pHostileReference)
+{
+    GetCombatData()->hostileRefManager.insertFirst(pHostileReference);
+    BroadcastAttackerLink(pHostileReference->getSource()->getOwner(), true);
+}
+
+void Unit::removeHatedBy(HostileReference* pHostileReference)
+{
+    BroadcastAttackerLink(pHostileReference->getSource()->getOwner(), false);
+}
+
+void Unit::BroadcastAttackerLink(Unit* attacker, bool added)
+{
+    // not from the destructor (CombatStop in RemoveFromWorld already removed the links)
+    if (!attacker || !IsInWorld())
+        return;
+
+    if (Player* victim = GetBeneficiaryPlayer())
+    {
+        if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+        {
+            if (added)
+                teams->BroadcastAttackerAdded(victim, attacker);
+            else
+                teams->BroadcastAttackerRemoved(victim, attacker);
+        }
+    }
 }
 
 void Unit::HandleExitCombat(bool customLeash, bool pvpCombat)
@@ -8533,6 +8575,8 @@ void Unit::SetSpeedRate(UnitMoveType mtype, float rate, bool forced)
 
 void Unit::SetDeathState(DeathState s)
 {
+    bool const wasAlive = IsAlive();
+
     if (s == JUST_DIED)
     {
         RemoveAllAurasOnDeath();
@@ -8573,6 +8617,17 @@ void Unit::SetDeathState(DeathState s)
         //_ApplyAllAuraMods();
     }*/
     m_deathState = s;
+
+    if (wasAlive != IsAlive() && GetTypeId() == TYPEID_PLAYER)
+    {
+        if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+        {
+            if (wasAlive)
+                teams->BroadcastDied(static_cast<Player*>(this));
+            else
+                teams->BroadcastResurrected(static_cast<Player*>(this));
+        }
+    }
 }
 
 /*########################################
@@ -9241,6 +9296,7 @@ void Unit::SetHealth(uint32 val)
         if (charmer && (charmer->GetTypeId() == TYPEID_PLAYER) && ((Player*)charmer)->GetGroup())
             ((Player*)charmer)->SetGroupUpdateFlag(GROUP_UPDATE_FLAG_PET_CUR_HP);
     }
+    OnHealthChanged.Broadcast(this);
 }
 
 void Unit::SetMaxHealth(uint32 val)
@@ -9263,6 +9319,8 @@ void Unit::SetMaxHealth(uint32 val)
 
     if (val < health)
         SetHealth(val);
+
+    OnHealthChanged.Broadcast(this);
 }
 
 void Unit::SetHealthPercent(float percent)
@@ -9302,6 +9360,8 @@ void Unit::SetPower(Powers power, uint32 val)
         if (pet->getPetType() == HUNTER_PET && power == POWER_HAPPINESS)
             pet->UpdateDamagePhysical(BASE_ATTACK);
     }
+
+    OnPowerChanged.Broadcast(this, power);
 }
 
 void Unit::SetMaxPower(Powers power, uint32 val)
@@ -9324,11 +9384,14 @@ void Unit::SetMaxPower(Powers power, uint32 val)
 
     if (val < cur_power)
         SetPower(power, val);
+
+    OnPowerChanged.Broadcast(this, power);
 }
 
 void Unit::ApplyPowerMod(Powers power, uint32 val, bool apply)
 {
     ApplyModUInt32Value(UNIT_FIELD_POWER1 + power, val, apply);
+    OnPowerChanged.Broadcast(this, power);
 
     // group update
     if (GetTypeId() == TYPEID_PLAYER)
@@ -9347,6 +9410,7 @@ void Unit::ApplyPowerMod(Powers power, uint32 val, bool apply)
 void Unit::ApplyMaxPowerMod(Powers power, uint32 val, bool apply)
 {
     ApplyModUInt32Value(UNIT_FIELD_MAXPOWER1 + power, val, apply);
+    OnPowerChanged.Broadcast(this, power);
 
     // group update
     if (GetTypeId() == TYPEID_PLAYER)

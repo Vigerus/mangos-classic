@@ -48,8 +48,17 @@
 #include "PlayerDefines.h"
 #include "Maps/SpawnGroupDefines.h"
 
+#include "delegates/Delegates.h"
+
 #include <list>
 #include <array>
+
+class Unit;
+
+// the unit's health or max health changed (Unit::OnHealthChanged); UnitResourceThresholds turns it into conditions
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnUnitHealthChanged, Unit* /*unit*/);
+// the unit's power or max power of that type changed (Unit::OnPowerChanged)
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnUnitPowerChanged, Unit* /*unit*/, Powers /*power*/);
 
 enum SpellPartialResist
 {
@@ -1228,13 +1237,15 @@ class Unit : public WorldObject
             if (itr == m_attackers.end())
             {
                 m_attackers.insert(pAttacker);
+                BroadcastAttackerLink(pAttacker, true);
                 return true;
             }
             return false;
         }
         void _removeAttacker(Unit* pAttacker)               //< (Internal Use) must be called only from Unit::AttackStop()
         {
-            m_attackers.erase(pAttacker);
+            if (m_attackers.erase(pAttacker))
+                BroadcastAttackerLink(pAttacker, false);
         }
         Unit* getAttackerForHelper()                        //< Return a possible enemy from this unit to help in combat
         {
@@ -1326,6 +1337,11 @@ class Unit : public WorldObject
 
         inline int32 GetResistance(SpellSchools school) const { return GetInt32Value(UNIT_FIELD_RESISTANCES + school); }
         inline void SetResistance(SpellSchools school, int32 val) { SetInt32Value(UNIT_FIELD_RESISTANCES + school, val); }
+
+        // fired on the unit's map thread after every change of health / max health, and power / max power (one
+        // broadcast each, no conditions: see UnitResourceThresholds for "below 30%" and the like)
+        FOnUnitHealthChanged OnHealthChanged;
+        FOnUnitPowerChanged OnPowerChanged;
 
         uint32 GetHealth()    const { return GetUInt32Value(UNIT_FIELD_HEALTH); }
         uint32 GetMaxHealth() const { return GetUInt32Value(UNIT_FIELD_MAXHEALTH); }
@@ -2085,8 +2101,12 @@ class Unit : public WorldObject
         void FixateTarget(Unit* taunter);
         ThreatManager& getThreatManager() { return GetCombatData()->threatManager; }
         ThreatManager const& getThreatManager() const { return GetCombatData()->threatManager; }
-        void addHatedBy(HostileReference* pHostileReference) { GetCombatData()->hostileRefManager.insertFirst(pHostileReference); };
-        void removeHatedBy(HostileReference* /*pHostileReference*/) { /* nothing to do yet */ }
+        // a unit put this one on its threat list / took it off (TeamSubsystem attacker events of the beneficiary player)
+        void addHatedBy(HostileReference* pHostileReference);
+        void removeHatedBy(HostileReference* pHostileReference);
+        // attacker started / stopped attacking this unit (threat link or melee attacker): TeamSubsystem attacker event
+        // of the beneficiary player (this unit or its owner), not while out of the world (destructor)
+        void BroadcastAttackerLink(Unit* attacker, bool added);
         HostileRefManager& getHostileRefManager() { return GetCombatData()->hostileRefManager; }
         HostileRefManager const& getHostileRefManager() const { return GetCombatData()->hostileRefManager; }
         void SetNoThreatState(bool state) { m_noThreat = state; }

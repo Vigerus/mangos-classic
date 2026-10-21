@@ -190,6 +190,10 @@ void HostileReference::SetHostileState(HostileState state)
 
 void HostileReference::removeReference()
 {
+    // invalidate() skips targetObjectDestroyLink: tell the target here, like unlink() does
+    if (isValid())
+        targetObjectDestroyLink();
+
     invalidate();
 
     ThreatRefStatusChangeEvent event(UEV_THREAT_REF_REMOVE_FROM_LIST, this);

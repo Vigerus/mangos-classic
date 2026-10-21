@@ -30,6 +30,8 @@
 #include <vector>
 
 class Group;
+class Player;
+class Unit;
 
 // the subscribed player joined a group (team)
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnJoinedTeam, Group* /*group*/, ObjectGuid /*self*/);
@@ -39,9 +41,28 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FOnLeftTeam, Group* /*group*/, ObjectGuid /
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnMemberJoinedTeam, Group* /*group*/, ObjectGuid /*self*/, ObjectGuid /*member*/);
 // another player left the subscribed player's group
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnMemberLeftTeam, Group* /*group*/, ObjectGuid /*self*/, ObjectGuid /*member*/);
+// the subscribed player entered combat (or something announced it will: a bot pulling or attacking)
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnCombatStarted, ObjectGuid /*self*/);
+// the subscribed player left combat (also when it dies: before OnDied)
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnCombatEnded, ObjectGuid /*self*/);
+// another member of the subscribed player's group, on the same map, entered combat
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnMemberCombatStarted, ObjectGuid /*self*/, Player* /*member*/);
+// another member of the subscribed player's group, on the same map, left combat
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnMemberCombatEnded, ObjectGuid /*self*/, Player* /*member*/);
+// a unit put the subscribed player (or its pet) on its threat list or started melee attacking it / took it off,
+// stopped (each link is reported on its own: a creature attacking a player usually adds both)
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnAttackerAdded, ObjectGuid /*self*/, Unit* /*attacker*/);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnAttackerRemoved, ObjectGuid /*self*/, Unit* /*attacker*/);
+// the same for another member of the subscribed player's group (or its pet) on the same map
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnMemberAttackerAdded, ObjectGuid /*self*/, Player* /*member*/, Unit* /*attacker*/);
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnMemberAttackerRemoved, ObjectGuid /*self*/, Player* /*member*/, Unit* /*attacker*/);
+// the subscribed player was alive and is not any more
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnDied, ObjectGuid /*self*/);
+// the subscribed player was dead (corpse, ghost) and is alive again
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnResurrected, ObjectGuid /*self*/);
 
 /*
- * Group membership events of single players, subscribed by the player's guid ("self"):
+ * Group membership, combat and life events of single players, subscribed by the player's guid ("self"):
  *
  *   TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>();
  *   teams->AddOnMemberJoinedTeam(bot->GetObjectGuid(), this, &Foo::OnMemberJoined);
@@ -49,8 +70,9 @@ DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnMemberLeftTeam, Group* /*group*/, Obje
  *   teams->RemoveAll(bot->GetObjectGuid(), this);
  *
  * Callbacks run on the thread that changes the group (the world thread for player commands, the bot's map
- * thread for bot invites) while the subsystem's lock is held: keep them short. Subscribing and unsubscribing
- * from inside a callback is allowed.
+ * thread for bot invites), or the player's map thread for combat and life events (member combat events only
+ * reach members on that map), while the subsystem's lock is held: keep them short. Subscribing and
+ * unsubscribing from inside a callback is allowed.
  */
 class TeamSubsystem : public WorldSubsystem
 {
@@ -63,6 +85,26 @@ class TeamSubsystem : public WorldSubsystem
         FDelegateHandle AddOnMemberJoinedTeam(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onMemberJoinedTeam, std::forward<Args>(args)...); }
         template <typename... Args>
         FDelegateHandle AddOnMemberLeftTeam(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onMemberLeftTeam, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnCombatStarted(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onCombatStarted, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnCombatEnded(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onCombatEnded, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnMemberCombatStarted(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onMemberCombatStarted, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnMemberCombatEnded(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onMemberCombatEnded, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnAttackerAdded(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onAttackerAdded, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnAttackerRemoved(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onAttackerRemoved, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnMemberAttackerAdded(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onMemberAttackerAdded, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnMemberAttackerRemoved(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onMemberAttackerRemoved, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnDied(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onDied, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnResurrected(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onResurrected, std::forward<Args>(args)...); }
 
         // unbinds the binding identified by handle (made by any of the AddOn* of self)
         bool Remove(ObjectGuid self, FDelegateHandle handle);
@@ -75,6 +117,17 @@ class TeamSubsystem : public WorldSubsystem
         void BroadcastMemberLeft(Group* group, ObjectGuid member);
         // called by Group before it is disbanded: OnLeftTeam for every member
         void BroadcastDisband(Group* group);
+        // called by Unit where the combat flag of a player changes, and by bots that start a fight: OnCombatStarted /
+        // OnCombatEnded for player, OnMemberCombatStarted / OnMemberCombatEnded for the group members on its map
+        void BroadcastCombatStarted(Player* player);
+        void BroadcastCombatEnded(Player* player);
+        // called by Unit where a unit puts victim (a player or its pet) on its threat list / takes it off: OnAttackerAdded /
+        // OnAttackerRemoved for victim, OnMemberAttackerAdded / OnMemberAttackerRemoved for the group members on its map
+        void BroadcastAttackerAdded(Player* victim, Unit* attacker);
+        void BroadcastAttackerRemoved(Player* victim, Unit* attacker);
+        // called by Unit where the death state of a player changes: OnDied / OnResurrected for player
+        void BroadcastDied(Player* player);
+        void BroadcastResurrected(Player* player);
 
         virtual void Deinitialize() override;
 
@@ -85,6 +138,16 @@ class TeamSubsystem : public WorldSubsystem
             FOnLeftTeam onLeftTeam;
             FOnMemberJoinedTeam onMemberJoinedTeam;
             FOnMemberLeftTeam onMemberLeftTeam;
+            FOnCombatStarted onCombatStarted;
+            FOnCombatEnded onCombatEnded;
+            FOnMemberCombatStarted onMemberCombatStarted;
+            FOnMemberCombatEnded onMemberCombatEnded;
+            FOnAttackerAdded onAttackerAdded;
+            FOnAttackerRemoved onAttackerRemoved;
+            FOnMemberAttackerAdded onMemberAttackerAdded;
+            FOnMemberAttackerRemoved onMemberAttackerRemoved;
+            FOnDied onDied;
+            FOnResurrected onResurrected;
 
             bool IsBound() const;
         };
@@ -109,6 +172,12 @@ class TeamSubsystem : public WorldSubsystem
         void Broadcast(ObjectGuid self, DelegateType PlayerDelegates::* member, Params... params);
 
         static std::vector<ObjectGuid> GetMembers(Group* group);
+        // the other members of player's group that are on its map (they run on the same map thread)
+        static std::vector<Player*> GetMembersOnMap(Player* player);
+        // the self delegate (self, params...) for player, then the member delegate (other, player, params...) for the
+        // members on its map
+        template <typename SelfDelegateType, typename MemberDelegateType, typename... Params>
+        void BroadcastToTeam(Player* player, SelfDelegateType PlayerDelegates::* self, MemberDelegateType PlayerDelegates::* member, Params... params);
         // drops self's entry when nothing is bound to it any more (not while a broadcast runs)
         void CleanupPlayer(PlayerMap::iterator itr);
 

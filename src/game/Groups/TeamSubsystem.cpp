@@ -18,10 +18,14 @@
 
 #include "Groups/TeamSubsystem.h"
 #include "Groups/Group.h"
+#include "Entities/Player.h"
 
 bool TeamSubsystem::PlayerDelegates::IsBound() const
 {
-    return onJoinedTeam.IsBound() || onLeftTeam.IsBound() || onMemberJoinedTeam.IsBound() || onMemberLeftTeam.IsBound();
+    return onJoinedTeam.IsBound() || onLeftTeam.IsBound() || onMemberJoinedTeam.IsBound() || onMemberLeftTeam.IsBound() ||
+           onCombatStarted.IsBound() || onCombatEnded.IsBound() || onMemberCombatStarted.IsBound() || onMemberCombatEnded.IsBound() ||
+           onAttackerAdded.IsBound() || onAttackerRemoved.IsBound() || onMemberAttackerAdded.IsBound() || onMemberAttackerRemoved.IsBound() ||
+           onDied.IsBound() || onResurrected.IsBound();
 }
 
 bool TeamSubsystem::Remove(ObjectGuid self, FDelegateHandle handle)
@@ -33,7 +37,12 @@ bool TeamSubsystem::Remove(ObjectGuid self, FDelegateHandle handle)
 
     PlayerDelegates& delegates = itr->second;
     bool const removed = delegates.onJoinedTeam.Remove(handle) || delegates.onLeftTeam.Remove(handle) ||
-                         delegates.onMemberJoinedTeam.Remove(handle) || delegates.onMemberLeftTeam.Remove(handle);
+                         delegates.onMemberJoinedTeam.Remove(handle) || delegates.onMemberLeftTeam.Remove(handle) ||
+                         delegates.onCombatStarted.Remove(handle) || delegates.onCombatEnded.Remove(handle) ||
+                         delegates.onMemberCombatStarted.Remove(handle) || delegates.onMemberCombatEnded.Remove(handle) ||
+                         delegates.onAttackerAdded.Remove(handle) || delegates.onAttackerRemoved.Remove(handle) ||
+                         delegates.onMemberAttackerAdded.Remove(handle) || delegates.onMemberAttackerRemoved.Remove(handle) ||
+                         delegates.onDied.Remove(handle) || delegates.onResurrected.Remove(handle);
     CleanupPlayer(itr);
     return removed;
 }
@@ -47,7 +56,12 @@ uint32 TeamSubsystem::RemoveAll(ObjectGuid self, const void* obj)
 
     PlayerDelegates& delegates = itr->second;
     uint32 const removed = delegates.onJoinedTeam.RemoveAll(obj) + delegates.onLeftTeam.RemoveAll(obj) +
-                           delegates.onMemberJoinedTeam.RemoveAll(obj) + delegates.onMemberLeftTeam.RemoveAll(obj);
+                           delegates.onMemberJoinedTeam.RemoveAll(obj) + delegates.onMemberLeftTeam.RemoveAll(obj) +
+                           delegates.onCombatStarted.RemoveAll(obj) + delegates.onCombatEnded.RemoveAll(obj) +
+                           delegates.onMemberCombatStarted.RemoveAll(obj) + delegates.onMemberCombatEnded.RemoveAll(obj) +
+                           delegates.onAttackerAdded.RemoveAll(obj) + delegates.onAttackerRemoved.RemoveAll(obj) +
+                           delegates.onMemberAttackerAdded.RemoveAll(obj) + delegates.onMemberAttackerRemoved.RemoveAll(obj) +
+                           delegates.onDied.RemoveAll(obj) + delegates.onResurrected.RemoveAll(obj);
     CleanupPlayer(itr);
     return removed;
 }
@@ -72,6 +86,70 @@ std::vector<ObjectGuid> TeamSubsystem::GetMembers(Group* group)
     for (Group::MemberSlot const& slot : group->GetMemberSlots())
         members.push_back(slot.guid);
     return members;
+}
+
+std::vector<Player*> TeamSubsystem::GetMembersOnMap(Player* player)
+{
+    std::vector<Player*> members;
+    if (Group* group = player->GetGroup())
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+            if (Player* member = ref->getSource())
+                if (member != player && member->IsInMap(player))
+                    members.push_back(member);
+    return members;
+}
+
+template <typename SelfDelegateType, typename MemberDelegateType, typename... Params>
+void TeamSubsystem::BroadcastToTeam(Player* player, SelfDelegateType PlayerDelegates::* self, MemberDelegateType PlayerDelegates::* member, Params... params)
+{
+    if (!m_hasPlayers || !player)
+        return;
+
+    std::lock_guard<std::recursive_mutex> lock(m_lock);
+    ObjectGuid const guid = player->GetObjectGuid();
+    Broadcast(guid, self, guid, params...);
+    for (Player* other : GetMembersOnMap(player))
+        Broadcast(other->GetObjectGuid(), member, other->GetObjectGuid(), player, params...);
+}
+
+void TeamSubsystem::BroadcastCombatStarted(Player* player)
+{
+    BroadcastToTeam(player, &PlayerDelegates::onCombatStarted, &PlayerDelegates::onMemberCombatStarted);
+}
+
+void TeamSubsystem::BroadcastCombatEnded(Player* player)
+{
+    BroadcastToTeam(player, &PlayerDelegates::onCombatEnded, &PlayerDelegates::onMemberCombatEnded);
+}
+
+void TeamSubsystem::BroadcastAttackerAdded(Player* victim, Unit* attacker)
+{
+    if (attacker)
+        BroadcastToTeam(victim, &PlayerDelegates::onAttackerAdded, &PlayerDelegates::onMemberAttackerAdded, attacker);
+}
+
+void TeamSubsystem::BroadcastAttackerRemoved(Player* victim, Unit* attacker)
+{
+    if (attacker)
+        BroadcastToTeam(victim, &PlayerDelegates::onAttackerRemoved, &PlayerDelegates::onMemberAttackerRemoved, attacker);
+}
+
+void TeamSubsystem::BroadcastDied(Player* player)
+{
+    if (!m_hasPlayers || !player)
+        return;
+
+    std::lock_guard<std::recursive_mutex> lock(m_lock);
+    Broadcast(player->GetObjectGuid(), &PlayerDelegates::onDied, player->GetObjectGuid());
+}
+
+void TeamSubsystem::BroadcastResurrected(Player* player)
+{
+    if (!m_hasPlayers || !player)
+        return;
+
+    std::lock_guard<std::recursive_mutex> lock(m_lock);
+    Broadcast(player->GetObjectGuid(), &PlayerDelegates::onResurrected, player->GetObjectGuid());
 }
 
 void TeamSubsystem::BroadcastMemberJoined(Group* group, ObjectGuid member)
