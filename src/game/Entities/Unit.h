@@ -2094,6 +2094,10 @@ class Unit : public WorldObject
         void AddThreat(Unit* pVictim, float threat = 0.0f, bool crit = false, SpellSchoolMask schoolMask = SPELL_SCHOOL_MASK_NONE, SpellEntry const* threatSpell = nullptr);
         float ApplyTotalThreatModifier(float threat, SpellSchoolMask schoolMask = SPELL_SCHOOL_MASK_NORMAL);
         void DeleteThreatList();
+        void SendHighestThreatUpdate(HostileReference* hostileReference);
+        void SendThreatClear() const;
+        void SendThreatRemove(HostileReference* hostileReference) const;
+        void SendThreatUpdate();
         bool SelectHostileTarget();
         bool IsSuppressedTarget(Unit* target) const;
         bool IsOfflineTarget(Unit* victim) const;

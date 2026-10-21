@@ -432,7 +432,7 @@ HostileReference* ThreatContainer::selectNextVictim(Unit* attacker, HostileRefer
 //============================================================
 
 ThreatManager::ThreatManager(Unit* owner)
-    : iCurrentVictim(nullptr), iOwner(owner)
+    : iCurrentVictim(nullptr), iOwner(owner), iUpdateTimer(THREAT_UPDATE_INTERVAL), iUpdateNeed(false)
 {
 }
 
@@ -443,6 +443,8 @@ void ThreatManager::clearReferences()
     iThreatContainer.clearReferences();
     iThreatOfflineContainer.clearReferences();
     iCurrentVictim = nullptr;
+    iUpdateTimer.Reset(THREAT_UPDATE_INTERVAL);
+    iUpdateNeed = false;
 }
 
 //============================================================
@@ -483,6 +485,7 @@ void ThreatManager::addThreatDirectly(Unit* victim, float threat, bool noNew)
         HostileReference* hostileReference = new HostileReference(victim, this, 0); // threat has to be 0 here
         iThreatContainer.addReference(hostileReference);
         hostileReference->addThreat(threat); // now we add the real threat
+        iUpdateNeed = true;
         Unit* owner = getOwner();
         owner->TriggerAggroLinkingEvent(victim);
         Unit* victim_owner = victim->GetMaster();
@@ -594,7 +597,15 @@ void ThreatManager::FixateTarget(Unit* victim)
 
 void ThreatManager::setCurrentVictim(HostileReference* hostileReference)
 {
+    // including nullptr==nullptr case
+    if (hostileReference == iCurrentVictim)
+        return;
+
+    if (hostileReference)
+        iOwner->SendHighestThreatUpdate(hostileReference);
+
     iCurrentVictim = hostileReference;
+    iUpdateNeed = true;
 }
 
 void ThreatManager::setCurrentVictimByTarget(Unit* target)
@@ -621,6 +632,8 @@ void ThreatManager::processThreatEvent(ThreatRefStatusChangeEvent& threatRefStat
             if ((getCurrentVictim() == hostileReference && threatRefStatusChangeEvent.getFValue() < 0.0f) ||
                     (getCurrentVictim() != hostileReference && threatRefStatusChangeEvent.getFValue() > 0.0f))
                 setDirty(true);                             // the order in the threat list might have changed
+            if (hostileReference->isOnline())
+                iUpdateNeed = true;
             break;
         case UEV_THREAT_REF_ONLINE_STATUS:
             if (!hostileReference->isOnline())
@@ -630,7 +643,9 @@ void ThreatManager::processThreatEvent(ThreatRefStatusChangeEvent& threatRefStat
                     setCurrentVictim(nullptr);
                     setDirty(true);
                 }
+                iOwner->SendThreatRemove(hostileReference);
                 iThreatContainer.remove(hostileReference);
+                iUpdateNeed = true;
                 iThreatOfflineContainer.addReference(hostileReference);
             }
             else
@@ -638,6 +653,7 @@ void ThreatManager::processThreatEvent(ThreatRefStatusChangeEvent& threatRefStat
                 if (getCurrentVictim() && hostileReference->getThreat() > (1.1f * getCurrentVictim()->getThreat()))
                     setDirty(true);
                 iThreatContainer.addReference(hostileReference);
+                iUpdateNeed = true;
                 iThreatOfflineContainer.remove(hostileReference);
             }
             break;
@@ -649,7 +665,9 @@ void ThreatManager::processThreatEvent(ThreatRefStatusChangeEvent& threatRefStat
             }
             if (hostileReference->isOnline())
             {
+                iOwner->SendThreatRemove(hostileReference);
                 iThreatContainer.remove(hostileReference);
+                iUpdateNeed = true;
             }
             else
                 iThreatOfflineContainer.remove(hostileReference);
@@ -659,6 +677,20 @@ void ThreatManager::processThreatEvent(ThreatRefStatusChangeEvent& threatRefStat
             ClearSuppressed(hostileReference);
             setDirty(true);
             break;
+    }
+}
+
+void ThreatManager::UpdateForClient(uint32 diff)
+{
+    if (!iUpdateNeed || isThreatListEmpty())
+        return;
+
+    iUpdateTimer.Update(diff);
+    if (iUpdateTimer.Passed())
+    {
+        iOwner->SendThreatUpdate();
+        iUpdateTimer.Reset(THREAT_UPDATE_INTERVAL);
+        iUpdateNeed = false;
     }
 }
 

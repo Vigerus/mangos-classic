@@ -504,6 +504,9 @@ void Unit::Update(const uint32 diff)
             m_lastManaUseTimer -= diff;
     }
 
+    if (CanHaveThreatList())
+        getThreatManager().UpdateForClient(diff);
+
     if (uint32 base_att = getAttackTimer(BASE_ATTACK))
         setAttackTimer(BASE_ATTACK, (diff >= base_att ? 0 : base_att - diff));
 
@@ -8719,8 +8722,63 @@ void Unit::AddThreat(Unit* pVictim, float threat /*= 0.0f*/, bool crit /*= false
 
 void Unit::DeleteThreatList()
 {
+    if (CanHaveThreatList(true) && !getThreatManager().isThreatListEmpty())
+        SendThreatClear();
+
     getThreatManager().clearReferences();
     getHostileRefManager().deleteReferences();
+}
+
+// Threat packets use custom opcodes: the 1.12 client has no threat display, HermesProxy
+// translates them for the modern client. Threat is sent as float, unscaled.
+void Unit::SendThreatUpdate()
+{
+    ThreatList const& tlist = getThreatManager().getThreatList();
+    if (uint32 count = tlist.size())
+    {
+        WorldPacket data(SMSG_THREAT_UPDATE, 8 + 4 + count * 12);
+        data << GetPackGUID();
+        data << uint32(count);
+        for (auto itr : tlist)
+        {
+            data << itr->getUnitGuid().WriteAsPacked();
+            data << float(itr->getThreat());
+        }
+        SendMessageToSet(data, false);
+    }
+}
+
+void Unit::SendHighestThreatUpdate(HostileReference* hostileReference)
+{
+    ThreatList const& tlist = getThreatManager().getThreatList();
+    if (uint32 count = tlist.size())
+    {
+        WorldPacket data(SMSG_HIGHEST_THREAT_UPDATE, 8 + 8 + 4 + count * 12);
+        data << GetPackGUID();
+        data << hostileReference->getUnitGuid().WriteAsPacked();
+        data << uint32(count);
+        for (auto itr : tlist)
+        {
+            data << itr->getUnitGuid().WriteAsPacked();
+            data << float(itr->getThreat());
+        }
+        SendMessageToSet(data, false);
+    }
+}
+
+void Unit::SendThreatClear() const
+{
+    WorldPacket data(SMSG_THREAT_CLEAR, 8);
+    data << GetPackGUID();
+    SendMessageToSet(data, false);
+}
+
+void Unit::SendThreatRemove(HostileReference* hostileReference) const
+{
+    WorldPacket data(SMSG_THREAT_REMOVE, 8 + 8);
+    data << GetPackGUID();
+    data << hostileReference->getUnitGuid().WriteAsPacked();
+    SendMessageToSet(data, false);
 }
 
 //======================================================================

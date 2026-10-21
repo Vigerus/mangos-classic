@@ -863,10 +863,23 @@ enum Opcodes
     SMSG_CHARACTER_PROFILE_REALM_CONNECTED          = 0x339,
     SMSG_UNK                                        = 0x33A,
     SMSG_DEFENSE_MESSAGE                            = 0x33B,
+    MSG_GM_RESETINSTANCELIMIT                       = 0x33C,
+    SMSG_MOTD                                       = 0x33D,
+    SMSG_MOVE_SET_FLIGHT                            = 0x33E,
+    SMSG_MOVE_UNSET_FLIGHT                          = 0x33F,
+    CMSG_MOVE_FLIGHT_ACK                            = 0x340,
+    MSG_MOVE_START_SWIM_CHEAT                       = 0x341,
+    MSG_MOVE_STOP_SWIM_CHEAT                        = 0x342,
+    // Custom opcodes, not known to the 1.12 client. HermesProxy translates them
+    // into the modern client's threat packets (UnitDetailedThreatSituation & co.)
+    SMSG_HIGHEST_THREAT_UPDATE                      = 0x343,
+    SMSG_THREAT_UPDATE                              = 0x344,
+    SMSG_THREAT_REMOVE                              = 0x345,
+    SMSG_THREAT_CLEAR                               = 0x346,
 };
 
 // Don't forget to change this value and add opcode name to Opcodes.cpp when you add new opcode!
-#define NUM_MSG_TYPES 0x33C
+#define NUM_MSG_TYPES 0x347
 
 /// Player state
 enum SessionStatus

@@ -23,6 +23,7 @@
 #include "Globals/SharedDefines.h"
 #include "Utilities/LinkedReference/Reference.h"
 #include "Entities/UnitEvents.h"
+#include "Util/Timer.h"
 #include "Entities/ObjectGuid.h"
 #include <list>
 
@@ -31,6 +32,8 @@
 class Unit;
 class ThreatManager;
 struct SpellEntry;
+
+#define THREAT_UPDATE_INTERVAL (1 * IN_MILLISECONDS)        // Server should send threat update to client periodically each second
 
 //==============================================================
 // Class to calculate the real threat based
@@ -236,6 +239,9 @@ class ThreatManager
         // When a target is unreachable, we need to set someone as low priority
         void SetTargetSuppressed(Unit* target);
         void ClearSuppressed(HostileReference* except);
+
+        // Periodic threat list sync for clients (custom opcodes, translated by HermesProxy)
+        void UpdateForClient(uint32 diff);
     private:
         void UpdateContainers();
 
@@ -243,6 +249,8 @@ class ThreatManager
         Unit* iOwner;
         ThreatContainer iThreatContainer;
         ThreatContainer iThreatOfflineContainer;
+        ShortTimeTracker iUpdateTimer;
+        bool iUpdateNeed;
 };
 
 //=================================================
