@@ -200,6 +200,77 @@ namespace
         return name;
     }
 
+    // the merged call tree of the period, the nodes with the most inclusive time (and their parents) marked sent,
+    // the names with the most exclusive time
+    struct ProfilingSnapshot
+    {
+        MergedNode root;
+        std::vector<MergedNode*> nodes;             // by inclusive time
+        std::vector<FlatStat> flatStats;
+        size_t sentCount = 0;
+    };
+
+    void TakeSnapshot(ProfilingSnapshot& snapshot, size_t maxTreeNodes, size_t maxFlatStats)
+    {
+        ProfilingRegistry& registry = GetRegistry();
+        std::vector<ProfilingThread*> threads;
+        {
+            std::lock_guard<std::mutex> lock(registry.lock);
+            threads = registry.threads;
+        }
+
+        uint32 const epoch = registry.epoch.load(std::memory_order_relaxed);
+        for (ProfilingThread const* thread : threads)
+            Merge(thread->root, snapshot.root, epoch);
+
+        std::unordered_map<uint32, FlatStat> flat;
+        std::vector<ProfilingStat*> path;
+        Finish(snapshot.root, snapshot.nodes, flat, path);
+
+        std::sort(snapshot.nodes.begin(), snapshot.nodes.end(), [](MergedNode const* a, MergedNode const* b) { return a->totalNs > b->totalNs; });
+        for (MergedNode* node : snapshot.nodes)
+        {
+            if (snapshot.sentCount >= maxTreeNodes)
+                break;
+            for (MergedNode* itr = node; itr && itr->stat && !itr->sent; itr = itr->parent)
+            {
+                itr->sent = true;
+                ++snapshot.sentCount;
+            }
+        }
+
+        for (auto const& itr : flat)
+            snapshot.flatStats.push_back(itr.second);
+        std::sort(snapshot.flatStats.begin(), snapshot.flatStats.end(), [](FlatStat const& a, FlatStat const& b) { return a.exclusiveNs > b.exclusiveNs; });
+        if (snapshot.flatStats.size() > maxFlatStats)
+            snapshot.flatStats.resize(maxFlatStats);
+    }
+
+    std::string FormatMs(uint64 ns)
+    {
+        char buffer[32];
+        snprintf(buffer, sizeof(buffer), "%.3f", double(ns) / 1000000.0);
+        return buffer;
+    }
+
+    void WriteTextTree(MergedNode const& node, uint32 depth, std::ostringstream& out)
+    {
+        std::vector<MergedNode const*> children;
+        for (auto const& itr : node.children)
+            if (itr.second->sent)
+                children.push_back(itr.second.get());
+        std::sort(children.begin(), children.end(), [](MergedNode const* a, MergedNode const* b) { return a->totalNs > b->totalNs; });
+
+        for (MergedNode const* child : children)
+        {
+            char line[128];
+            snprintf(line, sizeof(line), "%10llu %12s %12s %10s  ", (unsigned long long)child->count, FormatMs(child->totalNs).c_str(),
+                FormatMs(child->exclusiveNs).c_str(), FormatMs(child->maxNs).c_str());
+            out << line << std::string(depth * 2, ' ') << child->stat->name << "\n";
+            WriteTextTree(*child, depth + 1, out);
+        }
+    }
+
     void WriteTree(MergedNode const& node, uint32 parentId, uint32& nextId, std::ostringstream& out)
     {
         std::vector<MergedNode const*> children;
@@ -286,6 +357,29 @@ uint64 ProfilingSubsystem::GetCollectingMs()
     return uint64(std::max<int64>(0, NowNs() - GetRegistry().startNs)) / 1000000;
 }
 
+std::string ProfilingSubsystem::BuildTextReport(size_t maxTreeNodes, size_t maxFlatStats)
+{
+    ProfilingSnapshot snapshot;
+    TakeSnapshot(snapshot, maxTreeNodes, maxFlatStats);
+
+    std::ostringstream out;
+    out << "Profiling: " << GetCollectingMs() << " ms collected, " << snapshot.sentCount << " of " << snapshot.nodes.size() << " call paths shown\n";
+    out << "Call tree (by inclusive time):\n";
+    out << "     calls      incl ms      excl ms     max ms  name\n";
+    WriteTextTree(snapshot.root, 0, out);
+
+    out << "Flat (by exclusive time, inclusive without recursion):\n";
+    out << "     calls      incl ms      excl ms     max ms  name\n";
+    for (FlatStat const& stat : snapshot.flatStats)
+    {
+        char line[128];
+        snprintf(line, sizeof(line), "%10llu %12s %12s %10s  ", (unsigned long long)stat.count, FormatMs(stat.totalNs).c_str(),
+            FormatMs(stat.exclusiveNs).c_str(), FormatMs(stat.maxNs).c_str());
+        out << line << stat.stat->name << "\n";
+    }
+    return out.str();
+}
+
 bool ProfilingSubsystem::HandleReportRequest(Player* player, std::string const& msg)
 {
     std::string const request = "BOT\ttelemetry";
@@ -305,45 +399,12 @@ void ProfilingSubsystem::SendReport(Player* player)
     if (!player->GetSession())
         return;
 
-    ProfilingRegistry& registry = GetRegistry();
-    std::vector<ProfilingThread*> threads;
-    {
-        std::lock_guard<std::mutex> lock(registry.lock);
-        threads = registry.threads;
-    }
-
-    // merged call tree of the period
-    uint32 const epoch = registry.epoch.load(std::memory_order_relaxed);
-    MergedNode root;
-    for (ProfilingThread const* thread : threads)
-        Merge(thread->root, root, epoch);
-
-    std::vector<MergedNode*> nodes;
-    std::unordered_map<uint32, FlatStat> flat;
-    std::vector<ProfilingStat*> path;
-    Finish(root, nodes, flat, path);
-
-    // the nodes with the most inclusive time and their parents
-    std::sort(nodes.begin(), nodes.end(), [](MergedNode const* a, MergedNode const* b) { return a->totalNs > b->totalNs; });
-    size_t sentCount = 0;
-    for (MergedNode* node : nodes)
-    {
-        if (sentCount >= reportTreeNodes)
-            break;
-        for (MergedNode* itr = node; itr && itr->stat && !itr->sent; itr = itr->parent)
-        {
-            itr->sent = true;
-            ++sentCount;
-        }
-    }
-
-    // the names with the most exclusive time
-    std::vector<FlatStat> flatStats;
-    for (auto const& itr : flat)
-        flatStats.push_back(itr.second);
-    std::sort(flatStats.begin(), flatStats.end(), [](FlatStat const& a, FlatStat const& b) { return a.exclusiveNs > b.exclusiveNs; });
-    if (flatStats.size() > reportFlatStats)
-        flatStats.resize(reportFlatStats);
+    ProfilingSnapshot snapshot;
+    TakeSnapshot(snapshot, reportTreeNodes, reportFlatStats);
+    MergedNode const& root = snapshot.root;
+    std::vector<MergedNode*> const& nodes = snapshot.nodes;
+    std::vector<FlatStat> const& flatStats = snapshot.flatStats;
+    size_t const sentCount = snapshot.sentCount;
 
     std::ostringstream payload;
     payload << "P^" << GetCollectingMs() << "^" << sentCount << "^" << nodes.size();

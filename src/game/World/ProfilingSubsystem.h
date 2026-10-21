@@ -113,6 +113,9 @@ class ProfilingSubsystem : public WorldSubsystem
         static void ResetStats();
         // ms since the server started or the last ResetStats
         static uint64 GetCollectingMs();
+        // the data of the addon report as text: call tree with the paths of the most inclusive time, then the names
+        // of the most exclusive time (count, inclusive / exclusive / max ms), e.g. for the automation test logs
+        static std::string BuildTextReport(size_t maxTreeNodes = 80, size_t maxFlatStats = 40);
 
         // the addon request (see above), from the chat handler. True when msg was the request.
         bool HandleReportRequest(Player* player, std::string const& msg);

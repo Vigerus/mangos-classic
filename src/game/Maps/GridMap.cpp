@@ -270,6 +270,19 @@ uint16 GridMap::getArea(float x, float y) const
     return m_area_map[lx * 16 + ly];
 }
 
+void GridMap::InitFlat(float height)
+{
+    unloadData();
+    m_flags = 0;
+    m_gridArea = 0;
+    m_gridHeight = height;
+    m_liquidGlobalEntry = 0;
+    m_liquidGlobalFlags = 0;
+    m_liquidLevel = INVALID_HEIGHT_VALUE;
+    memset(m_holes, 0, sizeof(m_holes));
+    m_fullyLoaded = true;
+}
+
 float GridMap::getHeightFromFlat(float /*x*/, float /*y*/) const
 {
     return m_gridHeight;
@@ -1230,8 +1243,30 @@ GridMap* TerrainInfo::GetGrid(const float x, const float y, bool loadOnlyMap /*=
     return pMap;
 }
 
+void TerrainInfo::SetFlatPlane(float height)
+{
+    LOCK_GUARD lock(m_mutex);
+    m_flatPlane = true;
+    m_flatPlaneHeight = height;
+    for (auto& column : m_GridMaps)
+        for (GridMap* gridMap : column)
+            if (gridMap)
+                gridMap->InitFlat(height);
+}
+
 GridMap* TerrainInfo::LoadMapAndVMap(const uint32 x, const uint32 y, bool mapOnly /*= false*/)
 {
+    if (m_flatPlane)
+    {
+        LOCK_GUARD lock(m_mutex);
+        if (!m_GridMaps[x][y])
+        {
+            m_GridMaps[x][y] = new GridMap();
+            m_GridMaps[x][y]->InitFlat(m_flatPlaneHeight);
+        }
+        return m_GridMaps[x][y];
+    }
+
     if ((m_GridMaps[x][y] && mapOnly)
         || (VMAP::VMapFactory::createOrGetVMapManager()->IsTileLoaded(m_mapId, x, y) && MMAP::MMapFactory::createOrGetMMapManager()->IsMMapIsLoaded(m_mapId, x, y)))
     {

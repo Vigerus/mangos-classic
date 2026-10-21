@@ -107,6 +107,8 @@ class GridMap
         void unloadData();
         bool IsFullyLoaded() const { return m_fullyLoaded; }
         void SetFullyLoaded() { m_fullyLoaded = true; }
+        // a flat ground at height without area or liquid, instead of a .map file (test worlds)
+        void InitFlat(float height);
 
         static bool ExistMap(uint32 mapid, int gx, int gy);
         static bool ExistVMap(uint32 mapid, int gx, int gy);
@@ -176,6 +178,11 @@ class TerrainInfo : public Referencable<std::atomic_long>
 
         bool CanCheckLiquidLevel(float x, float y) const;
 
+        // every grid of the map becomes a flat ground at height, no .map, vmap or mmap file is loaded for it
+        // (test worlds, e.g. the automation tests on a map without terrain files). Call before the map is used.
+        void SetFlatPlane(float height);
+        bool IsFlatPlane() const { return m_flatPlane; }
+
     protected:
         friend class Map;
         friend class ObjectMgr;
@@ -194,6 +201,9 @@ class TerrainInfo : public Referencable<std::atomic_long>
         int UnrefGrid(const uint32& x, const uint32& y);
 
         const uint32 m_mapId;
+
+        bool m_flatPlane = false;
+        float m_flatPlaneHeight = 0.0f;
 
         GridMap* m_GridMaps[MAX_NUMBER_OF_GRIDS][MAX_NUMBER_OF_GRIDS];
         bool m_GridMapsLoadAttempted[MAX_NUMBER_OF_GRIDS][MAX_NUMBER_OF_GRIDS];
