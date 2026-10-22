@@ -97,3 +97,8 @@ cmake_install.cmake
 # Module files
 #
 src/modules/
+
+#
+# Python bytecode cache
+#
+__pycache__/
