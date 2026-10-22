@@ -5,6 +5,7 @@ Watch the mangos build output and redeploy to a server instance.
 - Waits until the build output stops changing (linker finished).
 - Gracefully stops the affected server(s) (Ctrl+C on their console, hard kill after a timeout).
   realmd is only stopped when realmd itself changed.
+- Also redeploys (restarts mangosd) when only the statetree xml / json or the stages changed (default on).
 - Copies .exe + .pdb, and replaces SERVER_DIR/statetree and SERVER_DIR/stages with fresh copies of the PlayerBots
   statetree and the dungeon stages (mangosd reads both only when it starts / a dungeon is first created).
 - Starts realmd first (if it was stopped / not running), then mangosd, each in its own console.
@@ -13,7 +14,7 @@ Usage:
     python deploy_watch.py                 # watch forever
     python deploy_watch.py --once          # deploy if needed, then exit
     python deploy_watch.py --dry-run       # only report what would happen
-    python deploy_watch.py --watch-statetree   # also redeploy when only statetree / stages files changed
+    python deploy_watch.py --no-watch-statetree   # redeploy only for new binaries, not for statetree / stages edits
 """
 
 import argparse
@@ -290,8 +291,8 @@ def main():
                     help="seconds the build output must stay unchanged before deploying (default 10)")
     ap.add_argument("--shutdown-timeout", type=float, default=120,
                     help="seconds to wait for a graceful shutdown before killing (default 120)")
-    ap.add_argument("--watch-statetree", action="store_true",
-                    help="also redeploy mangosd when only statetree / stages files changed")
+    ap.add_argument("--no-watch-statetree", dest="watch_statetree", action="store_false",
+                    help="do not redeploy mangosd when only statetree / stages files changed (watched by default)")
     ap.add_argument("--once", action="store_true", help="check once and exit")
     ap.add_argument("--dry-run", action="store_true", help="report only, do not stop/copy/start")
     args = ap.parse_args()
