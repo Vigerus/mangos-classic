@@ -25,7 +25,7 @@ bool TeamSubsystem::PlayerDelegates::IsBound() const
     return onJoinedTeam.IsBound() || onLeftTeam.IsBound() || onMemberJoinedTeam.IsBound() || onMemberLeftTeam.IsBound() ||
            onCombatStarted.IsBound() || onCombatEnded.IsBound() || onMemberCombatStarted.IsBound() || onMemberCombatEnded.IsBound() ||
            onAttackerAdded.IsBound() || onAttackerRemoved.IsBound() || onMemberAttackerAdded.IsBound() || onMemberAttackerRemoved.IsBound() ||
-           onDied.IsBound() || onResurrected.IsBound();
+           onDied.IsBound() || onResurrected.IsBound() || onLootRollStarted.IsBound();
 }
 
 bool TeamSubsystem::Remove(ObjectGuid self, FDelegateHandle handle)
@@ -141,6 +141,15 @@ void TeamSubsystem::BroadcastDied(Player* player)
 
     std::lock_guard<std::recursive_mutex> lock(m_lock);
     Broadcast(player->GetObjectGuid(), &PlayerDelegates::onDied, player->GetObjectGuid());
+}
+
+void TeamSubsystem::BroadcastLootRollStarted(Player* player, ObjectGuid lootGuid, uint32 itemSlot, uint32 itemId, uint8 voteMask)
+{
+    if (!m_hasPlayers || !player)
+        return;
+
+    std::lock_guard<std::recursive_mutex> lock(m_lock);
+    Broadcast(player->GetObjectGuid(), &PlayerDelegates::onLootRollStarted, player->GetObjectGuid(), lootGuid, itemSlot, itemId, voteMask);
 }
 
 void TeamSubsystem::BroadcastResurrected(Player* player)

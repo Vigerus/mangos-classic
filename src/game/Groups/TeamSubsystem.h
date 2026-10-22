@@ -60,6 +60,9 @@ DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnMemberAttackerRemoved, ObjectGuid /*se
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnDied, ObjectGuid /*self*/);
 // the subscribed player was dead (corpse, ghost) and is alive again
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnResurrected, ObjectGuid /*self*/);
+// the group started a loot roll the subscribed player may vote on (need / greed / pass): the looted object, the
+// item's slot in its loot, the item and the votes allowed to the player (RollVoteMask)
+DECLARE_MULTICAST_DELEGATE_FiveParams(FOnLootRollStarted, ObjectGuid /*self*/, ObjectGuid /*lootGuid*/, uint32 /*itemSlot*/, uint32 /*itemId*/, uint8 /*voteMask*/);
 
 /*
  * Group membership, combat and life events of single players, subscribed by the player's guid ("self"):
@@ -105,6 +108,8 @@ class TeamSubsystem : public WorldSubsystem
         FDelegateHandle AddOnDied(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onDied, std::forward<Args>(args)...); }
         template <typename... Args>
         FDelegateHandle AddOnResurrected(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onResurrected, std::forward<Args>(args)...); }
+        template <typename... Args>
+        FDelegateHandle AddOnLootRollStarted(ObjectGuid self, Args&&... args) { return AddTo(self, &PlayerDelegates::onLootRollStarted, std::forward<Args>(args)...); }
 
         // unbinds the binding identified by handle (made by any of the AddOn* of self)
         bool Remove(ObjectGuid self, FDelegateHandle handle);
@@ -128,6 +133,8 @@ class TeamSubsystem : public WorldSubsystem
         // called by Unit where the death state of a player changes: OnDied / OnResurrected for player
         void BroadcastDied(Player* player);
         void BroadcastResurrected(Player* player);
+        // called by GroupLootRoll when it sends the start of a roll to a voter: OnLootRollStarted for player
+        void BroadcastLootRollStarted(Player* player, ObjectGuid lootGuid, uint32 itemSlot, uint32 itemId, uint8 voteMask);
 
         virtual void Deinitialize() override;
 
@@ -148,6 +155,7 @@ class TeamSubsystem : public WorldSubsystem
             FOnMemberAttackerRemoved onMemberAttackerRemoved;
             FOnDied onDied;
             FOnResurrected onResurrected;
+            FOnLootRollStarted onLootRollStarted;
 
             bool IsBound() const;
         };

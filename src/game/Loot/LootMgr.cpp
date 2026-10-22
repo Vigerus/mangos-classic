@@ -30,6 +30,7 @@
 #include "Entities/Corpse.h"
 #include "Tools/Language.h"
 #include "BattleGround/BattleGroundMgr.h"
+#include "Groups/TeamSubsystem.h"
 #include <sstream>
 #include <iomanip>
 
@@ -634,6 +635,9 @@ void GroupLootRoll::SendStartRoll()
         data.put<uint8>(voteMaskPos, uint8(mask));
 
         plr->GetSession()->SendPacket(data);
+
+        if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+            teams->BroadcastLootRollStarted(plr, m_loot->GetLootGuid(), m_itemSlot, m_lootItem->itemId, uint8(mask));
     }
 }
 
