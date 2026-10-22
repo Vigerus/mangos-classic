@@ -139,6 +139,7 @@ namespace MMAP
         DEBUG_FILTER_LOG(LOG_FILTER_MAP_LOADING, "MMAP:loadMapData: Loaded %03i.mmap", mapId);
 
         // store inside our map list
+        std::unique_lock<std::shared_mutex> lock(m_lock);
         loadedMMaps.emplace(mapId, std::make_unique<MMapData>(mesh));
         return true;
     }
@@ -264,6 +265,7 @@ namespace MMAP
         dtTileRef tileRef = 0;
 
         // memory allocated for data is now managed by detour, and will be deallocated when the tile is removed
+        std::unique_lock<std::shared_mutex> lock(m_lock);
         dtStatus dtResult = mmapData->navMesh->addTile(data, fileHeader.size, DT_TILE_FREE_DATA, 0, &tileRef);
         if (dtStatusFailed(dtResult))
         {
@@ -403,6 +405,7 @@ namespace MMAP
         dtTileRef tileRef = mmapData->mmapLoadedTiles[packedGridPos];
 
         // unload, and mark as non loaded
+        std::unique_lock<std::shared_mutex> lock(m_lock);
         dtStatus dtResult = mmapData->navMesh->removeTile(tileRef, nullptr, nullptr);
         if (dtStatusFailed(dtResult))
         {
@@ -433,6 +436,7 @@ namespace MMAP
         }
 
         // unload all tiles from given map
+        std::unique_lock<std::shared_mutex> lock(m_lock);
         const auto& mmapData = loadedMMaps[mapId];
         for (MMapTileSet::iterator i = mmapData->mmapLoadedTiles.begin(); i != mmapData->mmapLoadedTiles.end(); ++i)
         {
@@ -507,6 +511,32 @@ namespace MMAP
             return nullptr;
 
         return queryItr->second;
+    }
+
+    dtNavMeshQuery const* MMapManager::GetThreadNavMeshQuery(uint32 mapId)
+    {
+        auto itr = loadedMMaps.find(mapId);
+        if (itr == loadedMMaps.end())
+            return nullptr;
+
+        MMapData& mmapData = *itr->second;
+        const auto threadId = std::this_thread::get_id();
+        std::lock_guard<std::mutex> guard(mmapData.threadQueriesMutex);
+        auto queryItr = mmapData.threadQueries.find(threadId);
+        if (queryItr != mmapData.threadQueries.end())
+            return queryItr->second;
+
+        dtNavMeshQuery* query = dtAllocNavMeshQuery();
+        MANGOS_ASSERT(query);
+        if (dtStatusFailed(query->init(mmapData.navMesh, 2048)))
+        {
+            dtFreeNavMeshQuery(query);
+            sLog.outError("MMAP:GetThreadNavMeshQuery: Failed to initialize dtNavMeshQuery for mapId %03u", mapId);
+            return nullptr;
+        }
+
+        mmapData.threadQueries.emplace(threadId, query);
+        return query;
     }
 
     dtNavMeshQuery const* MMapManager::GetModelNavMeshQuery(uint32 displayId)

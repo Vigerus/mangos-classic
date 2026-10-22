@@ -82,6 +82,7 @@
 #include "ahbot/AhBot.h"
 #include "playerbot/PlayerbotAIConfig.h"
 #include "playerbot/RandomPlayerbotMgr.h"
+#include "MotionGenerators/PathfindingWorker.h"
 #endif
 
 #include "Spells/SpellAuraWorldSubsystem.h"
@@ -175,6 +176,10 @@ World::~World()
     for (auto const session : m_sessionAddQueue)
         delete session;
 
+#ifdef ENABLE_PLAYERBOTS
+    // its threads use the mmaps
+    sPathfindingWorker.Shutdown();
+#endif
     VMAP::VMapFactory::clear();
     MMAP::MMapFactory::clear();
 

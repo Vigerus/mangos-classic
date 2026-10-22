@@ -22,6 +22,10 @@
 #include "Entities/Creature.h"
 #include "Entities/TemporarySpawn.h"
 #include "AI/BaseAI/UnitAI.h"
+#ifdef ENABLE_PLAYERBOTS
+#include "MotionGenerators/PathfindingWorker.h"
+#include "World/World.h"
+#endif
 
 //----- Point Movement Generator
 
@@ -66,6 +70,9 @@ void PointMovementGenerator::Interrupt(Unit& unit)
 {
     unit.clearUnitState(UNIT_STAT_ROAMING | UNIT_STAT_ROAMING_MOVE);
     unit.InterruptMoving();
+#ifdef ENABLE_PLAYERBOTS
+    m_pathRequest.reset();
+#endif
 }
 
 void PointMovementGenerator::Reset(Unit& unit)
@@ -82,16 +89,74 @@ bool PointMovementGenerator::Update(Unit& unit, const uint32&/* diff*/)
         return true;
     }
 
+#ifdef ENABLE_PLAYERBOTS
+    if (m_pathRequest && UpdateAsyncPath(unit))
+        return true;
+#endif
+
     if ((!unit.hasUnitState(UNIT_STAT_ROAMING_MOVE) && unit.movespline->Finalized()) || m_speedChanged)
         Initialize(unit);
+
+#ifdef ENABLE_PLAYERBOTS
+    if (m_pathRequest)
+        return true;
+#endif
 
     return !unit.movespline->Finalized();
 }
 
+#ifdef ENABLE_PLAYERBOTS
+bool PointMovementGenerator::UpdateAsyncPath(Unit& unit)
+{
+    if (!m_pathRequest->IsDone())
+        return true;
+
+    std::shared_ptr<NavPathRequest> request = std::move(m_pathRequest);
+    // the unit changed map meanwhile: ask again from where it is now
+    if (request->startMapId != unit.GetMapId())
+    {
+        Move(unit);
+        return true;
+    }
+
+    Movement::MoveSplineInit init(unit);
+    if (request->IsReady() && !request->segments.empty() && request->segments.front().points.size() >= 2)
+    {
+        // the worker has no unit to put the points on the ground with
+        PointsArray points = request->segments.front().points;
+        if (sWorld.getConfig(CONFIG_BOOL_PATH_FIND_NORMALIZE_Z))
+            for (Vector3& point : points)
+                unit.UpdateAllowedPositionZ(point.x, point.y, point.z);
+        // the unit stood while waiting, the path starts where it is
+        unit.GetPosition(points.front().x, points.front().y, points.front().z);
+        init.MovebyPath(points);
+    }
+    else
+        init.MoveTo(m_x, m_y, m_z, true);
+    LaunchSpline(unit, init);
+    return false;
+}
+#endif
+
 void PointMovementGenerator::Move(Unit& unit)
 {
+#ifdef ENABLE_PLAYERBOTS
+    if (m_asyncPath && m_generatePath && !unit.GetTransport())
+    {
+        float x, y, z;
+        unit.GetPosition(x, y, z);
+        m_pathRequest = sPathfindingWorker.Request(unit.GetMapId(), Vector3(x, y, z), unit.GetMapId(), Vector3(m_x, m_y, m_z), false);
+        return;
+    }
+#endif
+
     Movement::MoveSplineInit init(unit);
     init.MoveTo(m_x, m_y, m_z, m_generatePath);
+    LaunchSpline(unit, init);
+}
+
+void PointMovementGenerator::LaunchSpline(Unit& unit, Movement::MoveSplineInit& init)
+{
     if (m_forcedMovement == FORCED_MOVEMENT_WALK)
         init.SetWalk(true);
     else if (m_forcedMovement == FORCED_MOVEMENT_RUN)

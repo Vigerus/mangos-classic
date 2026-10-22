@@ -602,6 +602,7 @@ class ObjectMgr
         std::vector<uint32> const* GetAllRandomCreatureEntries(uint32 dbguid) const { return GetAllRandomEntries(m_creatureSpawnEntryMap, dbguid); }
         bool IsCreatureDbGuidDynGuided(uint32 dbGuid) const { return IsRandomDbGuidDynguided(m_creatureSpawnEntryMap, dbGuid); }
 
+        AreaTriggerMap const& GetAreaTriggers() const { return mAreaTriggers; }
         AreaTrigger const* GetGoBackTrigger(uint32 map_id) const;
         AreaTrigger const* GetMapEntranceTrigger(uint32 Map) const;
 

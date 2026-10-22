@@ -26,6 +26,8 @@
 
 #include <memory>
 #include <mutex>
+#include <shared_mutex>
+#include <thread>
 
 class Unit;
 
@@ -55,6 +57,8 @@ namespace MMAP
         {
             for (auto& navMeshQuerie : navMeshQueries)
                 dtFreeNavMeshQuery(navMeshQuerie.second);
+            for (auto& threadQuery : threadQueries)
+                dtFreeNavMeshQuery(threadQuery.second);
 
             if (navMesh)
                 dtFreeNavMesh(navMesh);
@@ -65,6 +69,10 @@ namespace MMAP
         // we have to use single dtNavMeshQuery for every instance, since those are not thread safe
         NavMeshQuerySet navMeshQueries;     // instanceId to query
         MMapTileSet mmapLoadedTiles;        // maps [map grid coords] to [dtTile]
+
+        // queries of threads outside the map updates (the path worker), one per thread
+        NavMeshGOQuerySet threadQueries;
+        std::mutex threadQueriesMutex;
 
         bool fullLoaded;
     };
@@ -109,6 +117,10 @@ namespace MMAP
 
             // the returned [dtNavMeshQuery const*] is NOT threadsafe
             dtNavMeshQuery const* GetNavMeshQuery(uint32 mapId, uint32 instanceId);
+            // query of the calling thread for threads outside the map updates (the path worker): hold GetLock()
+            // shared while creating and using it, the navmesh tiles are only added / removed under the lock
+            dtNavMeshQuery const* GetThreadNavMeshQuery(uint32 mapId);
+            std::shared_mutex& GetLock() { return m_lock; }
             dtNavMeshQuery const* GetModelNavMeshQuery(uint32 displayId);
             dtNavMesh const* GetNavMesh(uint32 mapId);
             dtNavMesh const* GetGONavMesh(uint32 displayId);
@@ -127,6 +139,9 @@ namespace MMAP
 
             std::unordered_map<uint32, std::unique_ptr<MMapGOData>> m_loadedModels;
             std::mutex m_modelsMutex;
+
+            // exclusive while maps and tiles are added / removed, shared by the threads using GetThreadNavMeshQuery
+            std::shared_mutex m_lock;
 
             bool m_enabled;
     };

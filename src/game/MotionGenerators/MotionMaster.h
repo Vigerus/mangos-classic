@@ -144,6 +144,10 @@ class MotionMaster : private std::stack<MovementGenerator*>
         void MoveFleeing(Unit* enemy, uint32 time = 0);
         void MovePoint(uint32 id, Position const& position, ForcedMovement forcedMovement = FORCED_MOVEMENT_NONE, float speed = 0.f, bool generatePath = true, ObjectGuid guid = ObjectGuid(), uint32 relayId = 0);
         void MovePoint(uint32 id, float x, float y, float z, ForcedMovement forcedMovement = FORCED_MOVEMENT_NONE, bool generatePath = true);
+#ifdef ENABLE_PLAYERBOTS
+        // MovePoint with the path calculated by the PathfindingWorker: the unit stands until it is there
+        void MovePointAsync(uint32 id, float x, float y, float z, ForcedMovement forcedMovement = FORCED_MOVEMENT_NONE);
+#endif
         void MovePointTOL(uint32 id, float x, float y, float z, bool takeOff, ForcedMovement forcedMovement = FORCED_MOVEMENT_NONE);
 
         void MovePath(std::vector<G3D::Vector3>& path, ForcedMovement forcedMovement = FORCED_MOVEMENT_NONE, bool flying = false, bool cyclic = true);

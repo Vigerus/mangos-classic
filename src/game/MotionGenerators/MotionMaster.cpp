@@ -411,6 +411,15 @@ void MotionMaster::MovePoint(uint32 id, float x, float y, float z, ForcedMovemen
     return MovePoint(id, Position(x, y, z, 0.f), forcedMovement, 0.f, generatePath);
 }
 
+#ifdef ENABLE_PLAYERBOTS
+void MotionMaster::MovePointAsync(uint32 id, float x, float y, float z, ForcedMovement forcedMovement/* = FORCED_MOVEMENT_NONE*/)
+{
+    PointMovementGenerator* generator = new PointMovementGenerator(id, x, y, z, true, forcedMovement);
+    generator->SetAsyncPath(true);
+    Mutate(generator);
+}
+#endif
+
 void MotionMaster::MovePointTOL(uint32 id, float x, float y, float z, bool takeOff, ForcedMovement forcedMovement/* = FORCED_MOVEMENT_NONE*/)
 {
     DEBUG_FILTER_LOG(LOG_FILTER_AI_AND_MOVEGENSS, "%s targeted point for %s (Id: %u X: %f Y: %f Z: %f)", m_owner->GetGuidStr().c_str(), takeOff ? "liftoff" : "landing", id, x, y, z);

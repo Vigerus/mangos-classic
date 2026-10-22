@@ -21,6 +21,17 @@
 
 #include "MovementGenerator.h"
 
+namespace Movement
+{
+    class MoveSplineInit;
+}
+
+#ifdef ENABLE_PLAYERBOTS
+#include <memory>
+
+struct NavPathRequest;
+#endif
+
 class PointMovementGenerator : public MovementGenerator
 {
     public:
@@ -40,14 +51,29 @@ class PointMovementGenerator : public MovementGenerator
 
         MovementGeneratorType GetMovementGeneratorType() const override { return POINT_MOTION_TYPE; }
 
+#ifdef ENABLE_PLAYERBOTS
+        // opt-in: the path is calculated by the PathfindingWorker, the unit stands until it is there
+        void SetAsyncPath(bool async) { m_asyncPath = async; }
+#endif
+
     protected:
         virtual void Move(Unit& unit);
         virtual void MovementInform(Unit& unit);
+        // walk / run / fly, facing and speed of the move, then launches it
+        void LaunchSpline(Unit& unit, Movement::MoveSplineInit& init);
 
     protected:
         float m_x, m_y, m_z, m_o, m_speed;
         bool m_generatePath;
         uint32 m_forcedMovement;
+
+#ifdef ENABLE_PLAYERBOTS
+        // launches the spline once the async path is calculated; true while it is not
+        bool UpdateAsyncPath(Unit& unit);
+
+        bool m_asyncPath = false;
+        std::shared_ptr<NavPathRequest> m_pathRequest;
+#endif
 
     private:
         uint32 m_id;

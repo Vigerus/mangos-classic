@@ -98,6 +98,9 @@ class PathFinder
 #ifdef ENABLE_PLAYERBOTS
         PathFinder();
         PathFinder(uint32 mapId, uint32 instanceId = 0);
+        // for threads outside the map updates: the caller's own query (MMapManager::GetThreadNavMeshQuery, used
+        // while holding MMapManager::GetLock() shared)
+        PathFinder(dtNavMeshQuery const* query, uint32 mapId);
         void setArea(uint32 mapId, float x, float y, float z, uint32 area = 1, float range = 10.0f);
         uint32 getArea(uint32 mapId, float x, float y, float z);
         unsigned short getFlags(uint32 mapId, float x, float y, float z);

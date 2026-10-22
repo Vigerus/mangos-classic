@@ -71,6 +71,15 @@ PathFinder::PathFinder(uint32 mapId, uint32 instanceId) :
     m_defaultNavMeshQuery = mmap->GetNavMeshQuery(mapId, instanceId);
     createFilter();
 }
+
+PathFinder::PathFinder(dtNavMeshQuery const* query, uint32 mapId) :
+    m_polyLength(0), m_type(PATHFIND_BLANK),
+    m_useStraightPath(false), m_forceDestination(false), m_straightLine(false), m_pointPathLimit(MAX_POINT_PATH_LENGTH), // TODO: Fix legitimate long paths
+    m_sourceUnit(nullptr), m_navMesh(nullptr), m_navMeshQuery(nullptr), m_cachedPoints(m_pointPathLimit* VERTEX_SIZE), m_pathPolyRefs(m_pointPathLimit), m_smoothPathPolyRefs(m_pointPathLimit), m_defaultMapId(mapId), m_defaultInstanceId(0)
+{
+    m_defaultNavMeshQuery = query;
+    createFilter();
+}
 #endif
 
 PathFinder::~PathFinder()
