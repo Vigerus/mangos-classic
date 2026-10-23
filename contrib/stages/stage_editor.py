@@ -4,7 +4,8 @@
 
 Shows the <readonly> data (navmesh floors colored per floor, ramps gray; creature spawns as cylinders, hover one for
 its name) and the editable stage boxes. Select a box in the list or by clicking it in the view; edit its stage name,
-center, half extents, clear position and canbeenteredincombatifnotcleared on the right. Boxes with the same name are
+center, half extents, clear / uncleared position and canbeenteredincombatifnotcleared on the right (cleared points are
+drawn in the stage's color, uncleared points red). Boxes with the same name are
 one stage; the first stage is the entrance, the order matters (a point belongs to the first stage containing it).
 
 Camera: W / S move along the view direction (also up / down when looking down), A / D sideways, Q / E
@@ -35,21 +36,25 @@ FLY_SPEED = 0.6         # camera distances per second
 
 
 class StageBox:
-    def __init__(self, name, box, clear, combat):
+    def __init__(self, name, box, clear, uncleared, combat):
         self.name = name
         self.box = list(box)          # cx cy cz ex ey ez
         self.clear = clear            # [x, y, z] or None
+        self.uncleared = uncleared    # [x, y, z] or None
         self.combat = combat
 
     @staticmethod
     def from_element(element):
         return StageBox(element.get("name", ""), stagelib.parse_box(element.get("box", "0 0 0 5 5 5")),
                         stagelib.parse_point(element.get("clearposition", "")),
+                        stagelib.parse_point(element.get("unclearedposition", "")),
                         element.get("canbeenteredincombatifnotcleared", "false") == "true")
 
     def to_element(self):
+        def point(p):
+            return " ".join(stagelib.fmt(v) for v in p) if p else ""
         return ET.Element("stage", name=self.name, box=" ".join(stagelib.fmt(v) for v in self.box),
-                          clearposition=" ".join(stagelib.fmt(v) for v in self.clear) if self.clear else "",
+                          clearposition=point(self.clear), unclearedposition=point(self.uncleared),
                           canbeenteredincombatifnotcleared="true" if self.combat else "false")
 
     def bounds(self):
@@ -256,6 +261,8 @@ class Editor(QtWidgets.QMainWindow):
         self.load_readonly()
         self.clear_item = gl.GLScatterPlotItem(pos=np.zeros((0, 3)), size=14, color=(1, 1, 1, 1))
         self.view.addItem(self.clear_item)
+        self.uncleared_item = gl.GLScatterPlotItem(pos=np.zeros((0, 3)), size=11, color=(1.0, 0.25, 0.25, 1.0))
+        self.view.addItem(self.uncleared_item)
         self.handle_item = gl.GLScatterPlotItem(pos=np.zeros((0, 3)), size=12, color=(1.0, 0.9, 0.2, 1.0))
         self.handle_item.setGLOptions("translucent")
         self.handle_item.setDepthValue(10)
@@ -301,21 +308,26 @@ class Editor(QtWidgets.QMainWindow):
         for box in self.extent:
             box.setMinimum(0.5)
         self.clear = [spin(1.0) for _ in range(3)]
+        self.uncleared = [spin(1.0) for _ in range(3)]
         for label, boxes in (("Center x y z", self.center), ("Half extent x y z", self.extent)):
             row = QtWidgets.QHBoxLayout()
             for box in boxes:
                 row.addWidget(box)
             form.addRow(label, row)
 
+        # where bots stand while the master is in the stage: once it is cleared / before
         self.clear_check = QtWidgets.QCheckBox("clearposition")
-        self.clear_check.toggled.connect(self.on_edit)
-        row = QtWidgets.QHBoxLayout()
-        for box in self.clear:
-            row.addWidget(box)
-        form.addRow(self.clear_check, row)
-        center_button = QtWidgets.QPushButton("Clear position = box center (floor)")
-        center_button.clicked.connect(self.on_clear_center)
-        form.addRow("", center_button)
+        self.uncleared_check = QtWidgets.QCheckBox("unclearedposition")
+        for check, boxes, text in ((self.clear_check, self.clear, "Clear position = box center (floor)"),
+                                   (self.uncleared_check, self.uncleared, "Uncleared position = box center (floor)")):
+            check.toggled.connect(self.on_edit)
+            row = QtWidgets.QHBoxLayout()
+            for box in boxes:
+                row.addWidget(box)
+            form.addRow(check, row)
+            center_button = QtWidgets.QPushButton(text)
+            center_button.clicked.connect(lambda _, c=check, b=boxes: self.on_point_center(c, b))
+            form.addRow("", center_button)
 
         self.combat_check = QtWidgets.QCheckBox("canbeenteredincombatifnotcleared")
         self.combat_check.toggled.connect(self.on_edit)
@@ -402,6 +414,11 @@ class Editor(QtWidgets.QMainWindow):
         colors = [(1, 1, 1, 1) if i == selected else stage_color(b.name) for i, b in enumerate(self.boxes) if b.clear]
         self.clear_item.setData(pos=np.array(clears) if clears else np.zeros((0, 3)),
                                 color=np.array(colors) if colors else (1, 1, 1, 1))
+        uncleared = [b.uncleared for b in self.boxes if b.uncleared]
+        colors = [(1, 1, 1, 1) if i == selected else (1.0, 0.25, 0.25, 1.0)
+                  for i, b in enumerate(self.boxes) if b.uncleared]
+        self.uncleared_item.setData(pos=np.array(uncleared) if uncleared else np.zeros((0, 3)),
+                                    color=np.array(colors) if colors else (1.0, 0.25, 0.25, 1.0))
 
     def update_handles(self):
         """Corner handles of the selected box: index bits x, y, z (0 low, 1 high); the opposite corner is 7 - index."""
@@ -489,9 +506,11 @@ class Editor(QtWidgets.QMainWindow):
             for i in range(3):
                 self.center[i].setValue(stage_box.box[i])
                 self.extent[i].setValue(stage_box.box[i + 3])
-            self.clear_check.setChecked(stage_box.clear is not None)
-            for i in range(3):
-                self.clear[i].setValue(stage_box.clear[i] if stage_box.clear else stage_box.box[i])
+            for check, boxes, point in ((self.clear_check, self.clear, stage_box.clear),
+                                        (self.uncleared_check, self.uncleared, stage_box.uncleared)):
+                check.setChecked(point is not None)
+                for i in range(3):
+                    boxes[i].setValue(point[i] if point else stage_box.box[i])
             self.combat_check.setChecked(stage_box.combat)
             boxes = sum(1 for b in self.boxes if b.name == stage_box.name)
             self.info.setText("Stage '%s': %d box%s" % (stage_box.name, boxes, "es" if boxes > 1 else ""))
@@ -505,25 +524,26 @@ class Editor(QtWidgets.QMainWindow):
         stage_box.name = self.name_edit.text().strip() or stage_box.name
         stage_box.box = [self.center[i].value() for i in range(3)] + [self.extent[i].value() for i in range(3)]
         stage_box.clear = [self.clear[i].value() for i in range(3)] if self.clear_check.isChecked() else None
+        stage_box.uncleared = [self.uncleared[i].value() for i in range(3)] if self.uncleared_check.isChecked() else None
         stage_box.combat = self.combat_check.isChecked()
         self.refresh_list()     # name / combat shown in the list
         self.refresh_boxes()
 
-    def on_clear_center(self):
+    def on_point_center(self, check, boxes):
         stage_box = self.current()
         if not stage_box:
             return
         cx, cy, cz, _, _, ez = stage_box.box
         self.updating = True
         for i, v in enumerate((cx, cy, cz - ez + 1.0)):
-            self.clear[i].setValue(v)
-        self.clear_check.setChecked(True)
+            boxes[i].setValue(v)
+        check.setChecked(True)
         self.updating = False
         self.on_edit()
 
     def on_add(self):
         c = self.view.opts["center"]
-        self.boxes.append(StageBox("New stage %d" % (len(self.boxes) + 1), [c.x(), c.y(), c.z(), 10, 10, 5], None, False))
+        self.boxes.append(StageBox("New stage %d" % (len(self.boxes) + 1), [c.x(), c.y(), c.z(), 10, 10, 5], None, None, False))
         self.refresh_list()
         self.list.setCurrentRow(len(self.boxes) - 1)
 
@@ -531,7 +551,7 @@ class Editor(QtWidgets.QMainWindow):
         stage_box = self.current()
         if not stage_box:
             return
-        copy = StageBox(stage_box.name, list(stage_box.box), None, stage_box.combat)
+        copy = StageBox(stage_box.name, list(stage_box.box), None, None, stage_box.combat)
         copy.box[0] += stage_box.box[3] * 2
         self.boxes.insert(self.list.currentRow() + 1, copy)
         self.refresh_list()

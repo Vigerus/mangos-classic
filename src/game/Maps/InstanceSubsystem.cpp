@@ -227,13 +227,21 @@ bool InstanceSubsystem::ReadStagesFile(std::string const& path, std::vector<Inst
             InstanceStageDef& def = stages[itr->second];
             def.boxes.push_back(stageBox);
 
-            std::string const clear = stage.get<std::string>("<xmlattr>.clearposition", "");
-            if (clear.find_first_not_of(" \t") != std::string::npos && def.positions.empty())
+            // one cleared and one uncleared point per stage, the first box that has it wins
+            for (bool const cleared : { true, false })
             {
+                std::string const attribute = cleared ? "clearposition" : "unclearedposition";
+                std::string const point = stage.get<std::string>("<xmlattr>." + attribute, "");
+                if (point.find_first_not_of(" \t") == std::string::npos)
+                    continue;
+                if (std::any_of(def.positions.begin(), def.positions.end(), [cleared](InstanceStagePosition const& p) { return p.cleared == cleared; }))
+                    continue;
+
                 InstanceStagePosition position;
-                std::istringstream values(clear);
+                position.cleared = cleared;
+                std::istringstream values(point);
                 if (!(values >> position.x >> position.y >> position.z))
-                    throw std::runtime_error("stage '" + name + "': clearposition needs \"x y z\"");
+                    throw std::runtime_error("stage '" + name + "': " + attribute + " needs \"x y z\"");
                 def.positions.push_back(position);
             }
         }
@@ -270,7 +278,7 @@ int32 InstanceSubsystem::FindStage(uint32 mapId, float x, float y, float z) cons
     return -1;
 }
 
-bool InstanceSubsystem::GetStagePosition(uint32 mapId, uint32 stage, uint8 classId, int32 spec, float& x, float& y, float& z) const
+bool InstanceSubsystem::GetStagePosition(uint32 mapId, uint32 stage, bool cleared, uint8 classId, int32 spec, float& x, float& y, float& z) const
 {
     std::shared_ptr<MapStages const> mapStages = FindMapStages(mapId);
     if (!mapStages || stage >= mapStages->stages.size() || !classId)
@@ -281,7 +289,7 @@ bool InstanceSubsystem::GetStagePosition(uint32 mapId, uint32 stage, uint8 class
     int32 bestScore = -1;
     for (InstanceStagePosition const& position : mapStages->stages[stage].positions)
     {
-        if ((position.classMask && !(position.classMask & classBit)) || (position.spec >= 0 && position.spec != spec))
+        if (position.cleared != cleared || (position.classMask && !(position.classMask & classBit)) || (position.spec >= 0 && position.spec != spec))
             continue;
 
         int32 const score = (position.classMask ? 2 : 0) + (position.spec >= 0 ? 1 : 0);

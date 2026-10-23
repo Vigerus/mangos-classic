@@ -100,7 +100,7 @@ def generate_stages(server, map_id, mesh, reach):
     if entrance:     # the first entrance; other wings' entrances are ordinary stages
         stage = ET.SubElement(stages, "stage", name="Entrance",
                               box=" ".join(stagelib.fmt(v) for v in (*entrance, 12.0, 12.0, 8.0)),
-                              clearposition="", canbeenteredincombatifnotcleared="false")
+                              clearposition="", unclearedposition="", canbeenteredincombatifnotcleared="false")
 
     mobs = [m for m in server.mobs(map_id) if m["counted"]]
     bosses = server.bosses(map_id)
@@ -147,7 +147,7 @@ def generate_stages(server, map_id, mesh, reach):
         clear = min(group, key=lambda m: (m["x"] - cx) ** 2 + (m["y"] - cy) ** 2)
         ET.SubElement(stages, "stage", name=name, box=" ".join(stagelib.fmt(v) for v in box),
                       clearposition=" ".join(stagelib.fmt(v) for v in (clear["x"], clear["y"], clear["z"])),
-                      canbeenteredincombatifnotcleared="false")
+                      unclearedposition="", canbeenteredincombatifnotcleared="false")
     return stages
 
 

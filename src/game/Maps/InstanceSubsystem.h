@@ -49,11 +49,13 @@ struct InstanceStageBox
     }
 };
 
-// where bots stand in a stage (the "Position Yourself" node of the dungeon trees): for the classes / specs it matches,
-// the best match wins (class and spec, then class, then spec, then any)
+// where bots stand in a stage (the "Position Yourself" node of the dungeon trees) while the master is in it: the
+// cleared point once the stage is cleared, the uncleared point before. For the classes / specs it matches, the best
+// match wins (class and spec, then class, then spec, then any)
 struct InstanceStagePosition
 {
     float x, y, z;
+    bool cleared = true;        // the cleared point, else the uncleared one
     uint32 classMask = 0;       // 1 << (class - 1) per class, 0 every class
     int32 spec = -1;            // talent tab 0..2 with the most points, -1 every spec
 };
@@ -66,7 +68,7 @@ struct InstanceStageDef
     std::vector<InstanceStageBox> boxes;
     std::vector<uint32> bosses;     // creature entries of the stage's bosses; registration adds the encounter
                                     // creatures (instance_encounters kill credit) spawned in the stage
-    std::vector<InstanceStagePosition> positions;   // where bots stand once the stage is cleared (optional)
+    std::vector<InstanceStagePosition> positions;   // where bots stand once the stage is cleared / before (optional)
 
     bool Contains(float x, float y, float z) const
     {
@@ -108,14 +110,16 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FOnPlayerLeaveMap, Player* /*player*/, Map*
  *
  *   <root map="289" name="Scholomance">
  *     <stages>
- *       <stage name="Reliquary" box="cx cy cz ex ey ez" clearposition="x y z" canbeenteredincombatifnotcleared="false"/>
+ *       <stage name="Reliquary" box="cx cy cz ex ey ez" clearposition="x y z" unclearedposition="x y z"
+ *              canbeenteredincombatifnotcleared="false"/>
  *     </stages>
  *     <readonly> navmesh floors, creature spawns: data for the tools of contrib/stages, not read here </readonly>
  *   </root>
  *
  * box is the center and half extents of an axis aligned box; stages with the same name are one stage of several
  * boxes; the first stage is the entrance. A stage containing an encounter creature (instance_encounters) is a boss
- * stage. RegisterStages does the same from code.
+ * stage. clearposition / unclearedposition (optional, empty for none): where bots stand while the master is in the
+stage once it is cleared / before. RegisterStages does the same from code.
  *
  * The creatures of a stage are the DB spawns (creature table) whose spawn point is inside one of its boxes, without
  * critters, uninteractible / invisible triggers and creatures friendly to players. In an instance a stage is cleared
@@ -152,8 +156,9 @@ class InstanceSubsystem : public WorldSubsystem
         std::vector<InstanceStageDef> GetStages(uint32 mapId) const;
         // the first stage containing the point, -1 when none does
         int32 FindStage(uint32 mapId, float x, float y, float z) const;
-        // the position of the stage that matches the class / spec best (InstanceStageDef::positions), false when none
-        bool GetStagePosition(uint32 mapId, uint32 stage, uint8 classId, int32 spec, float& x, float& y, float& z) const;
+        // the cleared / uncleared position of the stage that matches the class / spec best (InstanceStageDef::positions),
+        // false when none
+        bool GetStagePosition(uint32 mapId, uint32 stage, bool cleared, uint8 classId, int32 spec, float& x, float& y, float& z) const;
 
         // evaluates the stage in the map (its instance), from the map's thread; stage 0 is always cleared
         InstanceStageState GetStageState(Map* map, uint32 stage);
