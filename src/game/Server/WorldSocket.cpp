@@ -73,7 +73,8 @@ std::vector<uint32> InitOpcodeCooldowns()
 
     data[CMSG_WHO] = 5000;
     data[CMSG_WHOIS] = 5000;
-    data[CMSG_INSPECT] = 5000;
+    // no CMSG_INSPECT cooldown: the modern client (HermesProxy) opens the Inspect window only once the answer came, so
+    // a dropped request (inspecting another player within 5s) left it closed; the handler is a lookup and a distance check
 
     return data;
 }
