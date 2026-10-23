@@ -25,7 +25,8 @@ bool TeamSubsystem::PlayerDelegates::IsBound() const
     return onJoinedTeam.IsBound() || onLeftTeam.IsBound() || onMemberJoinedTeam.IsBound() || onMemberLeftTeam.IsBound() ||
            onCombatStarted.IsBound() || onCombatEnded.IsBound() || onMemberCombatStarted.IsBound() || onMemberCombatEnded.IsBound() ||
            onAttackerAdded.IsBound() || onAttackerRemoved.IsBound() || onMemberAttackerAdded.IsBound() || onMemberAttackerRemoved.IsBound() ||
-           onDied.IsBound() || onResurrected.IsBound() || onLootRollStarted.IsBound();
+           onDied.IsBound() || onResurrected.IsBound() || onTalentsChanged.IsBound() || onMemberTalentsChanged.IsBound() ||
+           onLootRollStarted.IsBound();
 }
 
 bool TeamSubsystem::Remove(ObjectGuid self, FDelegateHandle handle)
@@ -159,6 +160,11 @@ void TeamSubsystem::BroadcastResurrected(Player* player)
 
     std::lock_guard<std::recursive_mutex> lock(m_lock);
     Broadcast(player->GetObjectGuid(), &PlayerDelegates::onResurrected, player->GetObjectGuid());
+}
+
+void TeamSubsystem::BroadcastTalentsChanged(Player* player)
+{
+    BroadcastToTeam(player, &PlayerDelegates::onTalentsChanged, &PlayerDelegates::onMemberTalentsChanged);
 }
 
 void TeamSubsystem::BroadcastMemberJoined(Group* group, ObjectGuid member)

@@ -23,6 +23,7 @@
 #include "Server/Opcodes.h"
 #include "Spells/SpellMgr.h"
 #include "World/World.h"
+#include "Groups/TeamSubsystem.h"
 #include "Server/WorldPacket.h"
 #include "Server/WorldSession.h"
 #include "Entities/UpdateMask.h"
@@ -3379,6 +3380,11 @@ bool Player::addSpell(uint32 spell_id, bool active, bool learning, bool dependen
         // update used talent points count
         m_usedTalentCount += GetTalentSpellCost(talentPos);
         UpdateFreeTalentPoints(false);
+
+        // not while the spells are loaded at login
+        if (IsInWorld())
+            if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+                teams->BroadcastTalentsChanged(this);
     }
 
     // update free primary prof.points (if any, can be none in case GM .learn prof. learning)
@@ -3549,6 +3555,10 @@ void Player::removeSpell(uint32 spell_id, bool disabled, bool learn_low_rank, bo
             m_usedTalentCount = 0;
 
         UpdateFreeTalentPoints(false);
+
+        if (IsInWorld())
+            if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+                teams->BroadcastTalentsChanged(this);
     }
 
     // update free primary prof.points (if not overflow setting, can be in case GM use before .learn prof. learning)
