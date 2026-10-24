@@ -46,6 +46,10 @@
 
 #include <memory>
 
+#ifdef ENABLE_PLAYERBOTS
+#include "playerbot/PlayerbotDebugWindow.h"
+#endif
+
 #ifdef _WIN32
 #include "Platform/ServiceWin32.h"
 extern int m_ServiceStatus;
@@ -292,6 +296,8 @@ int Master::Run()
 #ifdef ENABLE_PLAYERBOTS
     // kick and save all players
     sWorld.KickAll(true);
+    // the debug window reads the spell store: closed before the singletons go away
+    sPlayerbotDebugWindow.Stop();
 #endif
 
     ///- Wait for DB delay threads to end
