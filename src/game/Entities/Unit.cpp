@@ -562,6 +562,102 @@ void Unit::Heartbeat()
         AI()->OnHeartbeat();
 }
 
+namespace
+{
+    thread_local AggroCauseScope const* currentAggroCause = nullptr;
+}
+
+AggroCauseScope::AggroCauseScope(char const* cause, Unit const* source) :
+    m_cause(cause), m_source(source ? source->GetObjectGuid() : ObjectGuid()), m_previous(currentAggroCause)
+{
+    currentAggroCause = this;
+}
+
+AggroCauseScope::~AggroCauseScope()
+{
+    currentAggroCause = m_previous;
+}
+
+AggroCauseScope const* AggroCauseScope::Current()
+{
+    return currentAggroCause;
+}
+
+#ifdef ENABLE_PLAYERBOTS
+namespace
+{
+    // the player behind the enemy (itself, or the owner of a pet / totem) when it is a bot or in a group with one
+    Player* BotGroupPlayer(Unit* enemy)
+    {
+        Player* player = enemy ? enemy->GetBeneficiaryPlayer() : nullptr;
+        if (!player)
+            return nullptr;
+        if (player->GetPlayerbotAI())
+            return player;
+        if (Group* group = player->GetGroup())
+            for (GroupReference* itr = group->GetFirstMember(); itr; itr = itr->next())
+                if (Player* member = itr->getSource())
+                    if (member->GetPlayerbotAI())
+                        return player;
+        return nullptr;
+    }
+
+    // "BotAggro: map 289 'Scholomance Necrolyte' [2890151 entry 10476] at (273.6, 101.1, 110.0) patrol -> Rottenmage (bot,
+    // 17.2 yd): check-for-help from 'Risen Guard' [2890291 entry 10489] 4.1 yd"
+    void LogBotGroupAggro(Creature* creature, Unit* enemy)
+    {
+        Map* map = creature->GetMap();
+        if (!map || !map->IsDungeon())
+            return;
+        Player* player = BotGroupPlayer(enemy);
+        if (!player)
+            return;
+
+        auto describe = [](Unit const* unit)
+        {
+            char buf[128];
+            if (unit->IsCreature())
+                snprintf(buf, sizeof(buf), "'%s' [%u entry %u]", unit->GetName(), static_cast<Creature const*>(unit)->GetDbGuid(), unit->GetEntry());
+            else
+                snprintf(buf, sizeof(buf), "'%s'", unit->GetName());
+            return std::string(buf);
+        };
+
+        std::string cause;
+        AggroCauseScope const* scope = AggroCauseScope::Current();
+        Unit* source = scope ? map->GetUnit(scope->GetSource()) : nullptr;
+        if (scope)
+        {
+            cause = scope->GetCause();
+            if (source && source != enemy)
+            {
+                char dist[32];
+                snprintf(dist, sizeof(dist), " %.1f yd", creature->GetDistance(source, true, DIST_CALC_COMBAT_REACH));
+                cause += " from " + describe(source) + dist;
+            }
+        }
+        // no scope: damage, a spell, threat (heal) or a direct attack by the enemy
+        else if (enemy->GetVictim() == creature || enemy->GetTarget() == creature)
+            cause = "attacked";
+        else
+            cause = "spell/threat";
+
+        // temporary summons keep their spawner, guardians (summoned by a creature's spell) their owner
+        const ObjectGuid summonerGuid = creature->IsTemporarySummon() ? creature->GetSpawnerGuid() : creature->GetOwnerGuid();
+        if (Unit* summoner = summonerGuid ? map->GetUnit(summonerGuid) : nullptr)
+            cause += ", summoned by " + describe(summoner);
+
+        char text[512];
+        snprintf(text, sizeof(text), "BotAggro: map %u %s at (%.1f, %.1f, %.1f)%s -> %s (%s%s, %.1f yd): ",
+            map->GetId(), describe(creature).c_str(), creature->GetPositionX(), creature->GetPositionY(), creature->GetPositionZ(),
+            creature->GetDefaultMovementType() == WAYPOINT_MOTION_TYPE ? " patrol" : "",
+            enemy->GetName(), player->GetPlayerbotAI() ? "bot" : "player", enemy != player ? " pet" : "",
+            creature->GetDistance(enemy, true, DIST_CALC_COMBAT_REACH));
+        sLog.outString("%s%s", text, cause.c_str());
+    }
+}
+#endif
+
 void Unit::TriggerAggroLinkingEvent(Unit* enemy)
 {
     if (!IsCreature() || !enemy)
@@ -573,6 +669,7 @@ void Unit::TriggerAggroLinkingEvent(Unit* enemy)
         if (!enemy)
             return;
 
+        AggroCauseScope cause("linked", &unit);
         if (unit.IsLinkingEventTrigger())
             unit.GetMap()->GetCreatureLinkingHolder()->DoCreatureLinkingEvent(LINKING_EVENT_AGGRO, static_cast<Creature*>(&unit), enemy);
 
@@ -7992,6 +8089,10 @@ void Unit::SetInCombatState(bool PvP, Unit* enemy)
             creature->SetCanAggro(true);
             AbortAINotifyEvent();
         }
+
+#ifdef ENABLE_PLAYERBOTS
+        LogBotGroupAggro(creature, enemy);
+#endif
 
         if (creature->AI())
             creature->AI()->EnterCombat(enemy);

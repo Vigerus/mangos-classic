@@ -1078,6 +1078,26 @@ struct SelectAttackingTargetParams
 
 struct SpellProcEventEntry;                                 // used only privately
 
+// why a creature that enters combat now does it (check-for-help, call-assistance, aggro on sight, linked), set while
+// the code that makes it attack runs; logged for creatures entering combat with a bot group in a dungeon
+class AggroCauseScope
+{
+    public:
+        AggroCauseScope(char const* cause, Unit const* source);
+        ~AggroCauseScope();
+        AggroCauseScope(AggroCauseScope const&) = delete;
+        AggroCauseScope& operator=(AggroCauseScope const&) = delete;
+
+        static AggroCauseScope const* Current();
+        char const* GetCause() const { return m_cause; }
+        ObjectGuid GetSource() const { return m_source; }
+
+    private:
+        char const* m_cause;
+        ObjectGuid m_source;
+        AggroCauseScope const* m_previous;
+};
+
 class Unit : public WorldObject
 {
     public:

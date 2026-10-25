@@ -519,6 +519,7 @@ void UnitAI::CheckForHelp(Unit* who, Unit* me, float distance)
         {
             if (me->CanAssistInCombatAgainst(who, victim))
             {
+                AggroCauseScope cause("check-for-help", who);
                 AttackStart(victim);
                 if (who->AI() && who->AI()->GetAIOrder() == ORDER_FLEEING)
                     who->GetMotionMaster()->InterruptPanic();
@@ -547,10 +548,14 @@ void UnitAI::DetectOrAttack(Unit* who)
             return;
         }
 
+        AggroCauseScope cause("aggro on sight", who);
         AttackStart(who);
     }
     else if (m_unit->GetMap()->IsDungeon())
+    {
+        AggroCauseScope cause("aggro on sight", who);
         m_unit->EngageInCombatWith(who);
+    }
 }
 
 bool UnitAI::CanTriggerStealthAlert(Unit* who, float /*attackRadius*/) const
@@ -596,6 +601,7 @@ class AiDelayEventAround : public BasicEvent
             {
                 if (Creature* pReceiver = m_owner.GetMap()->GetAnyTypeCreature(*itr))
                 {
+                    AggroCauseScope cause(m_eventType == AI_EVENT_CALL_ASSISTANCE ? "call-assistance" : "ai event", &m_owner);
                     pReceiver->AI()->ReceiveAIEvent(m_eventType, &m_owner, pInvoker, m_miscValue);
                     // Special case for type 0 (call-assistance)
                     if (m_eventType == AI_EVENT_CALL_ASSISTANCE)
@@ -649,6 +655,7 @@ void UnitAI::SendAIEventAround(AIEventType eventType, Unit* invoker, uint32 dela
             {
                 for (Creature* receiver : receiverList)
                 {
+                    AggroCauseScope cause(eventType == AI_EVENT_CALL_ASSISTANCE ? "call-assistance" : "ai event", m_unit);
                     receiver->AI()->ReceiveAIEvent(eventType, m_unit, invoker, miscValue);
                     // Special case for type 0 (call-assistance)
                     if (eventType == AI_EVENT_CALL_ASSISTANCE)
