@@ -129,7 +129,7 @@ DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnDungeonPlanChanged, ObjectGuid /*self*
  *                               dungeon, answers with the list
  *   planner delete <preset>     deletes it (and the bots' spots for it), answers with the list
  *   planner select <map> <preset or 0>          the player's preset for the dungeon, answers with the list
- *   plan status / next / prev   -> BOTPL  <active pull or 0>^<pulls>^<pull name>^<alive>^<total>^<cleared 0|1>^<preset name>^<preset>
+ *   plan status / next / prev   -> BOTPL  A^<active pull or 0>^<pulls>^<preset name>^<preset>~U^<pull name>^<alive>^<total>~...
  */
 class DungeonPlannerSubsystem : public WorldSubsystem
 {

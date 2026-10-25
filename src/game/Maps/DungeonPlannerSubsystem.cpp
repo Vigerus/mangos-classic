@@ -935,20 +935,31 @@ void DungeonPlannerSubsystem::SendPreset(Player* player, uint32 presetId)
 
 void DungeonPlannerSubsystem::SendStatus(Player* player)
 {
-    std::ostringstream out;
-    DungeonActivePull pull;
-    if (GetActivePull(player, player->GetMap(), pull))
-        out << pull.index << "^" << pull.count << "^" << pull.name << "^" << pull.alive << "^" << pull.total << "^"
-            << (pull.cleared ? 1 : 0) << "^" << pull.presetName << "^" << pull.presetId;
-    else
-        out << "0^0^^0^0^0^^0";
-
-    std::string text = "BOTPL\t" + out.str();
-    if (text.size() > 250)
-        text.resize(250);
-    WorldPacket data;
-    ChatHandler::BuildChatPacket(data, CHAT_MSG_PARTY, text.c_str(), LANG_ADDON, CHAT_TAG_NONE, player->GetObjectGuid(), player->GetName());
-    player->GetSession()->SendPacket(data);
+    std::ostringstream payload;
+    Map* map = player->GetMap();
+    {
+        std::lock_guard<std::mutex> lock(m_presetLock);
+        LoadPresets();
+        auto selection = map && map->IsDungeon() ? m_selections.find({ player->GetObjectGuid(), map->GetId() }) : m_selections.end();
+        auto itr = selection != m_selections.end() ? m_presets.find(selection->second) : m_presets.end();
+        if (itr != m_presets.end() && !itr->second->pulls.empty())
+        {
+            DungeonPreset const& preset = *itr->second;
+            RunState const& run = Run(player, map, preset);
+            payload << "A^" << (run.active + 1) << "^" << preset.pulls.size() << "^" << Clean(preset.name) << "^" << preset.id;
+            for (DungeonPlanPull const& pull : preset.pulls)
+            {
+                uint32 alive = 0;
+                for (uint32 guid : pull.guids)
+                    if (IsSpawnAlive(map, guid))
+                        ++alive;
+                payload << "~U^" << Clean(pull.name) << "^" << alive << "^" << pull.guids.size();
+            }
+        }
+        else
+            payload << "A^0^0^^0";
+    }
+    SendChunks(player, "BOTPL", payload.str());
 }
 
 void DungeonPlannerSubsystem::Deinitialize()
