@@ -123,10 +123,40 @@ UnitAI* GetAI_npc_spectral_tutor(Creature* pCreature)
     return new npc_spectral_tutorAI(pCreature);
 }
 
+/*######
+## spell_summon_risen_lackey
+######*/
+
+// 17618 - Summon Risen Lackey: raises the lackey at a Frail Skeleton (spell_script_target). Only the caster's own
+// skeletons, which it summons at its spot; the nearest one of a Dark Summoner of another pack would pull that pack
+struct SummonRisenLackey : public SpellScript
+{
+    bool OnCheckTarget(const Spell* spell, Unit* target, SpellEffectIndex /*eff*/) const override
+    {
+        return target->GetOwnerGuid() == spell->GetCaster()->GetObjectGuid();
+    }
+};
+
+// 16531 - Summon Frail Skeleton: the Dark Summoner keeps its skeleton at its own position (not in front of it), the spot
+// its Risen Lackeys are raised at
+struct SummonFrailSkeleton : public SpellScript
+{
+    void OnDestTarget(Spell* spell) const override
+    {
+        Unit* caster = spell->GetCaster();
+        spell->m_targets.m_destPos.x = caster->GetPositionX();
+        spell->m_targets.m_destPos.y = caster->GetPositionY();
+        spell->m_targets.m_destPos.z = caster->GetPositionZ();
+    }
+};
+
 void AddSC_scholomance()
 {
     Script* pNewScript = new Script;
     pNewScript->Name = "npc_spectral_tutor";
     pNewScript->GetAI = &GetAI_npc_spectral_tutor;
     pNewScript->RegisterSelf();
+
+    RegisterSpellScript<SummonFrailSkeleton>("spell_summon_frail_skeleton");
+    RegisterSpellScript<SummonRisenLackey>("spell_summon_risen_lackey");
 }
