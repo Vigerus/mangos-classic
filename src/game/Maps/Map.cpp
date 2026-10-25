@@ -27,6 +27,7 @@
 #include "Grids/GridNotifiersImpl.h"
 #include "Maps/InstanceData.h"
 #include "Maps/InstanceSubsystem.h"
+#include "Maps/DungeonPlannerSubsystem.h"
 #include "Maps/MapPersistentStateMgr.h"
 #include "Entities/Transports.h"
 #include "Globals/ObjectAccessor.h"
@@ -715,6 +716,9 @@ void Map::Update(const uint32& t_diff)
     // DungeonStage addon requests of the players on this map
     if (InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>())
         instances->UpdateMap(this);
+    // Bot Dungeon Planner / DungeonStage plan requests of the players on this map
+    if (DungeonPlannerSubsystem* planner = sWorld.GetSubsystem<DungeonPlannerSubsystem>())
+        planner->UpdateMap(this);
 
 #ifdef _MSC_VER
     localtime_s(&m_curTimeTm, &m_curTime);

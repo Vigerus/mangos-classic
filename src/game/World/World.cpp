@@ -88,6 +88,7 @@
 #include "Spells/SpellAuraWorldSubsystem.h"
 #include "Groups/TeamSubsystem.h"
 #include "Maps/InstanceSubsystem.h"
+#include "Maps/DungeonPlannerSubsystem.h"
 #include "World/ProfilingSubsystem.h"
 
 #include <algorithm>
@@ -159,6 +160,7 @@ World::World(): mail_timer(0), mail_timer_expires(0), m_NextWeeklyQuestReset(0),
     RegisterSubsystem<SpellAuraWorldSubsystem>();
     RegisterSubsystem<TeamSubsystem>();
     RegisterSubsystem<InstanceSubsystem>();
+    RegisterSubsystem<DungeonPlannerSubsystem>();
 }
 
 /// World destructor

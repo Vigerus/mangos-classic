@@ -22,6 +22,7 @@
 #include "Server/WorldSession.h"
 #include "World/World.h"
 #include "Maps/InstanceSubsystem.h"
+#include "Maps/DungeonPlannerSubsystem.h"
 #include "World/ProfilingSubsystem.h"
 #include "Server/Opcodes.h"
 #include "Globals/ObjectMgr.h"
@@ -84,6 +85,7 @@ bool WorldSession::CheckChatMessage(std::string& msg, bool addon/* = false*/)
 }
 
 // addon requests answered by the core, also without a group: DungeonStage ("BOT\tstages", InstanceSubsystem),
+// Bot Dungeon Planner / DungeonStage plans ("BOT\tplanner ...", "BOT\tplan ...", DungeonPlannerSubsystem),
 // BotStateTree Telemetry tab ("BOT\ttelemetry", ProfilingSubsystem)
 static bool HandleCoreAddonRequest(Player* player, uint32 lang, std::string const& msg)
 {
@@ -92,6 +94,10 @@ static bool HandleCoreAddonRequest(Player* player, uint32 lang, std::string cons
 
     if (InstanceSubsystem* instances = sWorld.GetSubsystem<InstanceSubsystem>())
         if (instances->HandleStageReportRequest(player, msg))
+            return true;
+
+    if (DungeonPlannerSubsystem* planner = sWorld.GetSubsystem<DungeonPlannerSubsystem>())
+        if (planner->HandleAddonRequest(player, msg))
             return true;
 
     ProfilingSubsystem* profiling = sWorld.GetSubsystem<ProfilingSubsystem>();
