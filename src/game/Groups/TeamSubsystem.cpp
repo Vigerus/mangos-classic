@@ -43,7 +43,9 @@ bool TeamSubsystem::Remove(ObjectGuid self, FDelegateHandle handle)
                          delegates.onMemberCombatStarted.Remove(handle) || delegates.onMemberCombatEnded.Remove(handle) ||
                          delegates.onAttackerAdded.Remove(handle) || delegates.onAttackerRemoved.Remove(handle) ||
                          delegates.onMemberAttackerAdded.Remove(handle) || delegates.onMemberAttackerRemoved.Remove(handle) ||
-                         delegates.onDied.Remove(handle) || delegates.onResurrected.Remove(handle);
+                         delegates.onDied.Remove(handle) || delegates.onResurrected.Remove(handle) ||
+                         delegates.onTalentsChanged.Remove(handle) || delegates.onMemberTalentsChanged.Remove(handle) ||
+                         delegates.onLootRollStarted.Remove(handle);
     CleanupPlayer(itr);
     return removed;
 }
@@ -62,7 +64,9 @@ uint32 TeamSubsystem::RemoveAll(ObjectGuid self, const void* obj)
                            delegates.onMemberCombatStarted.RemoveAll(obj) + delegates.onMemberCombatEnded.RemoveAll(obj) +
                            delegates.onAttackerAdded.RemoveAll(obj) + delegates.onAttackerRemoved.RemoveAll(obj) +
                            delegates.onMemberAttackerAdded.RemoveAll(obj) + delegates.onMemberAttackerRemoved.RemoveAll(obj) +
-                           delegates.onDied.RemoveAll(obj) + delegates.onResurrected.RemoveAll(obj);
+                           delegates.onDied.RemoveAll(obj) + delegates.onResurrected.RemoveAll(obj) +
+                           delegates.onTalentsChanged.RemoveAll(obj) + delegates.onMemberTalentsChanged.RemoveAll(obj) +
+                           delegates.onLootRollStarted.RemoveAll(obj);
     CleanupPlayer(itr);
     return removed;
 }
