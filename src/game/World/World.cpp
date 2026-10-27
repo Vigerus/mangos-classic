@@ -82,6 +82,7 @@
 #include "ahbot/AhBot.h"
 #include "playerbot/PlayerbotAIConfig.h"
 #include "playerbot/RandomPlayerbotMgr.h"
+#include "playerbot/PlayerbotMapServer.h"
 #include "MotionGenerators/PathfindingWorker.h"
 #endif
 
@@ -1627,6 +1628,8 @@ void World::Update(uint32 diff)
 #endif
     sRandomPlayerbotMgr.UpdateAI(diff);
     sRandomPlayerbotMgr.UpdateSessions(diff);
+    // outside the map updates: the map app's copies of the players and bots
+    sPlayerbotMapServer.Update();
 #endif
 
     /// <li> Handle session updates
