@@ -98,7 +98,7 @@ struct DungeonActivePull
 };
 
 // the plan of the subscribed player changed: selector (the player itself or a member of its group) selected another
-// preset for mapId or none, the selected preset was saved or deleted, or its active pull moved (Next / Prev)
+// preset for mapId or none, the selected preset was saved or deleted, or its active pull moved (Next / Prev / Set)
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnDungeonPlanChanged, ObjectGuid /*self*/, ObjectGuid /*selector*/, uint32 /*mapId*/);
 
 /*
@@ -106,7 +106,8 @@ DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnDungeonPlanChanged, ObjectGuid /*self*
  * database (dungeon_planner_presets / dungeon_planner_pulls), independent of the character that made them. A player
  * selects one preset per dungeon (dungeon_planner_selections), or none: then the bots use the map's stages
  * (InstanceSubsystem). In the instance one pull of the selected preset is active, from the first one not cleared;
- * Next / Prev (DungeonStage addon) move it. The bots of the player read it on their map thread (GetActivePull).
+ * Next / Prev / a click on a pull (DungeonStage addon) move it. A new version of the same preset keeps the active pull
+ * while it still has it (the same pull id), else the run starts again. The bots of the player read it on their map thread (GetActivePull).
  *
  *   DungeonPlannerSubsystem* planner = sWorld.GetSubsystem<DungeonPlannerSubsystem>();
  *   planner->AddOnPlanChanged(bot->GetObjectGuid(), this, &Foo::OnPlanChanged);
@@ -129,7 +130,8 @@ DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnDungeonPlanChanged, ObjectGuid /*self*
  *                               dungeon, answers with the list
  *   planner delete <preset>     deletes it (and the bots' spots for it), answers with the list
  *   planner select <map> <preset or 0>          the player's preset for the dungeon, answers with the list
- *   plan status / next / prev   -> BOTPL  A^<active pull or 0>^<pulls>^<preset name>^<preset>~U^<pull name>^<alive>^<total>~...
+ *   plan status / next / prev / set <pull, 1 based>
+ *                               -> BOTPL  A^<active pull or 0>^<pulls>^<preset name>^<preset>~U^<pull name>^<alive>^<total>~...
  */
 class DungeonPlannerSubsystem : public WorldSubsystem
 {
@@ -178,6 +180,8 @@ class DungeonPlannerSubsystem : public WorldSubsystem
         bool GetActivePull(Player* player, Map* map, DungeonActivePull& pull);
         // the next / previous pull (step 1 / -1), from the player's map thread
         void StepPull(Player* player, int32 step);
+        // the pull index (1 based) of the preset, from the player's map thread
+        void SetPull(Player* player, uint32 index);
 
         // ---- addon messages
 
@@ -195,6 +199,7 @@ class DungeonPlannerSubsystem : public WorldSubsystem
             uint32 instanceId = 0;
             uint32 presetId = 0;
             int32 active = -1;
+            uint32 pullId = 0;      // the active pull's id: a new version of the preset keeps it while it has it
         };
 
         struct Upload
@@ -207,6 +212,9 @@ class DungeonPlannerSubsystem : public WorldSubsystem
         void HandleRequest(Player* player, std::string const& msg);
         // the run state of the player in map, (re)started at the first pull not cleared
         RunState& Run(Player* player, Map* map, DungeonPreset const& preset);
+        // the run of the player's selected preset in its map, null without one; with m_presetLock held
+        RunState* SelectedRun(Player* player, DungeonPreset const*& preset);
+        static void SetActive(RunState& run, DungeonPreset const& preset, int32 active);
         void BroadcastPlanChanged(Player* selector, uint32 mapId);
         void BroadcastPlanChanged(ObjectGuid self, ObjectGuid selector, uint32 mapId);
 

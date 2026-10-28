@@ -626,7 +626,10 @@ void DungeonPlannerSubsystem::SelectPreset(Player* player, uint32 mapId, uint32 
             m_selections.erase({ player->GetObjectGuid(), mapId });
             CharacterDatabase.DirectPExecute("DELETE FROM `dungeon_planner_selections` WHERE `player` = '%u' AND `map` = '%u'", guid, mapId);
         }
-        m_runs.erase(player->GetObjectGuid());
+        // the same preset again (a saved new version of it): the run goes on, Run checks its active pull
+        auto run = m_runs.find(player->GetObjectGuid());
+        if (run != m_runs.end() && run->second.mapId == mapId && run->second.presetId != presetId)
+            m_runs.erase(run);
     }
     BroadcastPlanChanged(player, mapId);
 }
@@ -635,27 +638,60 @@ void DungeonPlannerSubsystem::SelectPreset(Player* player, uint32 mapId, uint32 
 DungeonPlannerSubsystem::RunState& DungeonPlannerSubsystem::Run(Player* player, Map* map, DungeonPreset const& preset)
 {
     RunState& run = m_runs[player->GetObjectGuid()];
-    if (run.mapId != map->GetId() || run.instanceId != map->GetInstanceId() || run.presetId != preset.id ||
-        run.active >= int32(preset.pulls.size()))
+    if (run.mapId == map->GetId() && run.instanceId == map->GetInstanceId() && run.presetId == preset.id)
     {
-        run.mapId = map->GetId();
-        run.instanceId = map->GetInstanceId();
-        run.presetId = preset.id;
-        // the first pull that is not cleared, else the last
-        run.active = int32(preset.pulls.size()) - 1;
+        if (run.active >= 0 && run.active < int32(preset.pulls.size()) && preset.pulls[run.active].id == run.pullId)
+            return run;
+        // a new version of the preset: its active pull where it is now, if it still has it
         for (size_t i = 0; i < preset.pulls.size(); ++i)
         {
-            bool alive = false;
-            for (uint32 guid : preset.pulls[i].guids)
-                alive = alive || IsSpawnAlive(map, guid);
-            if (alive)
+            if (preset.pulls[i].id == run.pullId)
             {
                 run.active = int32(i);
-                break;
+                return run;
             }
         }
     }
+
+    run.mapId = map->GetId();
+    run.instanceId = map->GetInstanceId();
+    run.presetId = preset.id;
+    // the first pull that is not cleared, else the last
+    int32 active = int32(preset.pulls.size()) - 1;
+    for (size_t i = 0; i < preset.pulls.size(); ++i)
+    {
+        bool alive = false;
+        for (uint32 guid : preset.pulls[i].guids)
+            alive = alive || IsSpawnAlive(map, guid);
+        if (alive)
+        {
+            active = int32(i);
+            break;
+        }
+    }
+    SetActive(run, preset, active);
     return run;
+}
+
+// with m_presetLock held
+DungeonPlannerSubsystem::RunState* DungeonPlannerSubsystem::SelectedRun(Player* player, DungeonPreset const*& preset)
+{
+    Map* map = player->GetMap();
+    LoadPresets();
+    auto selection = m_selections.find({ player->GetObjectGuid(), map->GetId() });
+    if (selection == m_selections.end() || !map->IsDungeon())
+        return nullptr;
+    auto itr = m_presets.find(selection->second);
+    if (itr == m_presets.end() || itr->second->pulls.empty())
+        return nullptr;
+    preset = itr->second.get();
+    return &Run(player, map, *preset);
+}
+
+void DungeonPlannerSubsystem::SetActive(RunState& run, DungeonPreset const& preset, int32 active)
+{
+    run.active = std::max(0, std::min(int32(preset.pulls.size()) - 1, active));
+    run.pullId = preset.pulls[run.active].id;
 }
 
 bool DungeonPlannerSubsystem::GetActivePull(Player* player, Map* map, DungeonActivePull& pull)
@@ -695,20 +731,28 @@ bool DungeonPlannerSubsystem::GetActivePull(Player* player, Map* map, DungeonAct
 
 void DungeonPlannerSubsystem::StepPull(Player* player, int32 step)
 {
-    Map* map = player->GetMap();
     {
         std::lock_guard<std::mutex> lock(m_presetLock);
-        LoadPresets();
-        auto selection = m_selections.find({ player->GetObjectGuid(), map->GetId() });
-        if (selection == m_selections.end() || !map->IsDungeon())
+        DungeonPreset const* preset = nullptr;
+        RunState* run = SelectedRun(player, preset);
+        if (!run)
             return;
-        auto itr = m_presets.find(selection->second);
-        if (itr == m_presets.end() || itr->second->pulls.empty())
-            return;
-        RunState& run = Run(player, map, *itr->second);
-        run.active = std::max(0, std::min(int32(itr->second->pulls.size()) - 1, run.active + step));
+        SetActive(*run, *preset, run->active + step);
     }
-    BroadcastPlanChanged(player, map->GetId());
+    BroadcastPlanChanged(player, player->GetMapId());
+}
+
+void DungeonPlannerSubsystem::SetPull(Player* player, uint32 index)
+{
+    {
+        std::lock_guard<std::mutex> lock(m_presetLock);
+        DungeonPreset const* preset = nullptr;
+        RunState* run = SelectedRun(player, preset);
+        if (!run || index == 0 || index > preset->pulls.size())
+            return;
+        SetActive(*run, *preset, int32(index) - 1);
+    }
+    BroadcastPlanChanged(player, player->GetMapId());
 }
 
 // ---------------------------------------------------------------- addon messages
@@ -766,6 +810,12 @@ void DungeonPlannerSubsystem::HandleRequest(Player* player, std::string const& m
             StepPull(player, 1);
         else if (command == "prev")
             StepPull(player, -1);
+        else if (command == "set")
+        {
+            uint32 index = 0;
+            if (in >> index)
+                SetPull(player, index);
+        }
         SendStatus(player);
         return;
     }
