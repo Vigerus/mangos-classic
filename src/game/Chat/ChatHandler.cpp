@@ -43,6 +43,7 @@
 #ifdef ENABLE_PLAYERBOTS
 #include "playerbot/playerbot.h"
 #include "playerbot/RandomPlayerbotMgr.h"
+#include "instancebot/GuildProgressSubsystem.h"
 #endif
 
 bool WorldSession::CheckChatMessage(std::string& msg, bool addon/* = false*/)
@@ -86,7 +87,7 @@ bool WorldSession::CheckChatMessage(std::string& msg, bool addon/* = false*/)
 
 // addon requests answered by the core, also without a group: DungeonStage ("BOT\tstages", InstanceSubsystem),
 // Bot Dungeon Planner / DungeonStage plans ("BOT\tplanner ...", "BOT\tplan ...", DungeonPlannerSubsystem),
-// BotStateTree Telemetry tab ("BOT\ttelemetry", ProfilingSubsystem)
+// BotStateTree Telemetry tab ("BOT\ttelemetry", ProfilingSubsystem), GuildProgress addon ("BOT\tguildprogress ...")
 static bool HandleCoreAddonRequest(Player* player, uint32 lang, std::string const& msg)
 {
     if (lang != LANG_ADDON)
@@ -99,6 +100,11 @@ static bool HandleCoreAddonRequest(Player* player, uint32 lang, std::string cons
     if (DungeonPlannerSubsystem* planner = sWorld.GetSubsystem<DungeonPlannerSubsystem>())
         if (planner->HandleAddonRequest(player, msg))
             return true;
+
+#ifdef ENABLE_PLAYERBOTS
+    if (GuildProgressSubsystem::instance().HandleAddonRequest(player, msg))
+        return true;
+#endif
 
     ProfilingSubsystem* profiling = sWorld.GetSubsystem<ProfilingSubsystem>();
     return profiling && profiling->HandleReportRequest(player, msg);

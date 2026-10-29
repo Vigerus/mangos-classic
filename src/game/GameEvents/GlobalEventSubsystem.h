@@ -51,6 +51,7 @@ private:
 
 using OnItemCreated = MulticastDelegate<Player*,uint32>;
 using OnAuraApplied = MulticastDelegate<Unit*,uint32>;
+using OnQuestRewarded = MulticastDelegate<Player*,uint32>;
 
 class GlobalEventSubsystem
 {
@@ -73,7 +74,13 @@ public:
         return onAuraAppliedDelegate;
     };
 
+    OnQuestRewarded& GetOnQuestRewardedDelegate()
+    {
+        return onQuestRewardedDelegate;
+    };
+
 private:
     OnItemCreated onItemCreatedDelegate;
     OnAuraApplied onAuraAppliedDelegate;
+    OnQuestRewarded onQuestRewardedDelegate;
 };

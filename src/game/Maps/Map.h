@@ -41,10 +41,6 @@
 #include "Util/UniqueTrackablePtr.h"
 #include "World/WorldStateVariableManager.h"
 
-#ifdef ENABLE_PLAYERBOTS
-#include "instancebot/InstanceBot.h"
-#endif
-
 #include <bitset>
 #include <functional>
 #include <list>
@@ -389,7 +385,6 @@ class Map : public GridRefManager<NGridType>
         bool HasActiveZones() { return !m_activeZones.empty(); }
         bool HasActiveZone(uint32 zoneId) { return find(m_activeZones.begin(), m_activeZones.end(), zoneId) != m_activeZones.end(); }
 #endif
-        instancebot::InstanceBot* GetInstanceBot() { return mp_instance_bot; }
 
     private:
         void LoadMapAndVMap(int gx, int gy);
@@ -473,8 +468,6 @@ class Map : public GridRefManager<NGridType>
 
         InstanceData* i_data;
         uint32 i_script_id;
-
-        instancebot::InstanceBot *mp_instance_bot = nullptr;
 
         // Map local low guid counters
         ObjectGuidGenerator<HIGHGUID_UNIT> m_CreatureGuids;

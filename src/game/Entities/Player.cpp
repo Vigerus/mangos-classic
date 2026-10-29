@@ -12595,6 +12595,8 @@ void Player::RewardQuest(Quest const* pQuest, uint32 reward, Object* questGiver,
     if (q_status.uState != QUEST_NEW)
         q_status.uState = QUEST_CHANGED;
 
+    GlobalEventSubsystem::instance().GetOnQuestRewardedDelegate().Broadcast(this, quest_id);
+
     if (announce)
         SendQuestReward(pQuest, xp);
 
