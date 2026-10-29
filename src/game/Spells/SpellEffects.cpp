@@ -52,6 +52,7 @@
 #include "Loot/LootMgr.h"
 #include "Movement/MoveSpline.h"
 #include "Entities/Transports.h"
+#include "GameEvents/GlobalEventSubsystem.h"
 
 pEffect SpellEffects[MAX_SPELL_EFFECTS] =
 {
@@ -3094,6 +3095,10 @@ void Spell::EffectEnchantItemPerm(SpellEffectIndex eff_idx)
 
     // add new enchanting if equipped
     item_owner->ApplyEnchantment(itemTarget, PERM_ENCHANTMENT_SLOT, true);
+
+    // an enchanter's recipe (not an item like a libram) went through
+    if (!m_CastItem)
+        GlobalEventSubsystem::instance().GetOnItemEnchantedDelegate().Broadcast(p_caster, m_spellInfo->Id);
 }
 
 void Spell::EffectEnchantItemTmp(SpellEffectIndex eff_idx)

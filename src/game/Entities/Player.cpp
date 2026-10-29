@@ -73,6 +73,7 @@
 #ifdef ENABLE_PLAYERBOTS
 #include "playerbot/playerbot.h"
 #include "playerbot/PlayerbotAIConfig.h"
+#include "instancebot/GuildProgressSubsystem.h"
 #endif
 
 #include <cmath>
@@ -18608,8 +18609,14 @@ bool Player::HasItemFitToSpellReqirements(SpellEntry const* spellInfo, Item cons
     return false;
 }
 
-bool Player::CanNoReagentCast(SpellEntry const* /*spellInfo*/) const
+bool Player::CanNoReagentCast(SpellEntry const* spellInfo) const
 {
+#ifdef ENABLE_PLAYERBOTS
+    // enchants the guild has made once (with the reagents) are free for its enchanters
+    if (GuildProgressSubsystem::instance().IsEnchantUnlocked(GetGuildId(), spellInfo->Id))
+        return true;
+#endif
+
     // don't take reagents for spells with SPELL_ATTR_EX5_NO_REAGENT_WHILE_PREP
 //[-ZERO]    if (spellInfo->AttributesEx5 & SPELL_ATTR_EX5_NO_REAGENT_WHILE_PREP &&
 //        HasFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_PREPARATION))
