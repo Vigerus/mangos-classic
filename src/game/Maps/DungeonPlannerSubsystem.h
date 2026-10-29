@@ -87,7 +87,7 @@ struct DungeonActivePull
     std::string presetName;
     uint32 id = 0;                  // the pull's id
     uint32 index = 0;               // 1 based
-    uint32 count = 0;
+    uint32 count = 0;               // 0: a preset without pulls, the rest is unset
     std::string name;
     uint32 alive = 0;
     uint32 total = 0;

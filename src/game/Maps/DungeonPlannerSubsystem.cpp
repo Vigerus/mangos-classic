@@ -705,14 +705,18 @@ bool DungeonPlannerSubsystem::GetActivePull(Player* player, Map* map, DungeonAct
     if (selection == m_selections.end())
         return false;
     auto itr = m_presets.find(selection->second);
-    if (itr == m_presets.end() || itr->second->pulls.empty())
+    if (itr == m_presets.end())
         return false;
 
     DungeonPreset const& preset = *itr->second;
-    RunState const& run = Run(player, map, preset);
-    DungeonPlanPull const& source = preset.pulls[run.active];
     pull.presetId = preset.id;
     pull.presetName = preset.name;
+    // a preset without pulls still replaces the stages: no pull (count 0), the bots follow the player
+    if (preset.pulls.empty())
+        return true;
+
+    RunState const& run = Run(player, map, preset);
+    DungeonPlanPull const& source = preset.pulls[run.active];
     pull.id = source.id;
     pull.index = uint32(run.active) + 1;
     pull.count = uint32(preset.pulls.size());
@@ -992,7 +996,9 @@ void DungeonPlannerSubsystem::SendStatus(Player* player)
         LoadPresets();
         auto selection = map && map->IsDungeon() ? m_selections.find({ player->GetObjectGuid(), map->GetId() }) : m_selections.end();
         auto itr = selection != m_selections.end() ? m_presets.find(selection->second) : m_presets.end();
-        if (itr != m_presets.end() && !itr->second->pulls.empty())
+        if (itr != m_presets.end() && itr->second->pulls.empty())
+            payload << "A^0^0^" << Clean(itr->second->name) << "^" << itr->second->id;
+        else if (itr != m_presets.end())
         {
             DungeonPreset const& preset = *itr->second;
             RunState const& run = Run(player, map, preset);
