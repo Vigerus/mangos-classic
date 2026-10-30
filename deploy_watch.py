@@ -9,12 +9,15 @@ Watch the mangos build output and redeploy to a server instance.
 - Copies .exe + .pdb, and replaces SERVER_DIR/statetree and SERVER_DIR/stages with fresh copies of the PlayerBots
   statetree and the dungeon stages (mangosd reads both only when it starts / a dungeon is first created).
 - Starts realmd first (if it was stopped / not running), then mangosd, each in its own console.
+- Runs the state tree editor (PlayerBots tools/StateTreeEditor) on the source statetree, so a save there redeploys,
+  and writes SERVER_DIR/statetree/StateTreeEditor.bat that starts it (or opens the running one).
 
 Usage:
     python deploy_watch.py                 # watch forever
     python deploy_watch.py --once          # deploy if needed, then exit
     python deploy_watch.py --dry-run       # only report what would happen
     python deploy_watch.py --no-watch-statetree   # redeploy only for new binaries, not for statetree / stages edits
+    python deploy_watch.py --no-editor     # do not run the state tree editor
 """
 
 import argparse
@@ -30,9 +33,13 @@ from datetime import datetime
 
 BUILD_DIR = r"F:\progs\mangos\build\bin\x64_RelWithDebInfo"
 SERVER_DIR = r"F:\server\vanillanew"
+STATETREE_DIR = r"F:\progs\mangos\src\modules\PlayerBots\statetree"
+EDITOR_SCRIPT = r"F:\progs\mangos\src\modules\PlayerBots\tools\StateTreeEditor\serve.py"
+EDITOR_LAUNCHER = "StateTreeEditor.bat"  # written into the deployed statetree, not part of the source
+DBC_DIR = os.path.join(SERVER_DIR, "dbc")  # the editor's spell lookup reads Spell.dbc
 # data directories copied with mangosd: (source, destination)
 DATA_DIRS = [
-    (r"F:\progs\mangos\src\modules\PlayerBots\statetree", os.path.join(SERVER_DIR, "statetree")),
+    (STATETREE_DIR, os.path.join(SERVER_DIR, "statetree")),
     (r"F:\progs\mangos\stages", os.path.join(SERVER_DIR, "stages")),     # Instance.StagesDir
 ]
 
@@ -91,6 +98,8 @@ def tree_sig(root):
     sig = {}
     for dirpath, _, files in os.walk(root):
         for f in files:
+            if f == EDITOR_LAUNCHER and dirpath == root:
+                continue
             p = os.path.join(dirpath, f)
             sig[os.path.relpath(p, root).lower()] = file_sig(p)
     return sig
@@ -208,6 +217,15 @@ def start_server(name):
         log(f"  WARNING: {name}.exe exited immediately with code {p.returncode}")
 
 
+def start_editor(port):
+    # edits the source statetree (the deployed copy is replaced on every deploy); its saves trigger a redeploy
+    if not os.path.exists(EDITOR_SCRIPT):
+        log(f"warning: {EDITOR_SCRIPT} missing, no state tree editor")
+        return None
+    log(f"state tree editor: http://127.0.0.1:{port}/")
+    return subprocess.Popen([sys.executable, EDITOR_SCRIPT, "--port", str(port), "--root", STATETREE_DIR, "--dbc", DBC_DIR])
+
+
 # ---------------------------------------------------------------- copying
 
 def copy_file(src, dst, retries=10):
@@ -223,7 +241,19 @@ def copy_file(src, dst, retries=10):
     raise RuntimeError(f"could not copy {src} -> {dst}")
 
 
-def deploy_data():
+def write_editor_launcher(port):
+    # serve.py fails when the port is taken (deploy_watch's own editor), then the running one is opened
+    dst_dir = os.path.join(SERVER_DIR, "statetree")
+    if not os.path.isdir(dst_dir):
+        return
+    with open(os.path.join(dst_dir, EDITOR_LAUNCHER), "w") as f:
+        f.write("@echo off\n"
+                "rem written by deploy_watch.py: edits the source trees, this folder is replaced on every deploy\n"
+                f'python "{EDITOR_SCRIPT}" --port {port} --root "{STATETREE_DIR}" --dbc "{DBC_DIR}" --open'
+                f' || start "" http://127.0.0.1:{port}/\n')
+
+
+def deploy_data(editor_port):
     for src_dir, dst_dir in DATA_DIRS:
         if not os.path.isdir(src_dir):
             log(f"  warning: {src_dir} missing, {dst_dir} left as it is")
@@ -232,6 +262,7 @@ def deploy_data():
         if os.path.isdir(dst_dir):
             shutil.rmtree(dst_dir)
         shutil.copytree(src_dir, dst_dir)
+    write_editor_launcher(editor_port)
 
 
 # ---------------------------------------------------------------- main
@@ -259,7 +290,7 @@ def deploy(changed, args):
                 log(f"  copying {f}")
                 copy_file(src, os.path.join(SERVER_DIR, f))
         if name == "mangosd":
-            deploy_data()
+            deploy_data(args.editor_port)
 
     for name in SERVERS:
         running = bool(find_processes(name))
@@ -295,17 +326,30 @@ def main():
                     help="do not redeploy mangosd when only statetree / stages files changed (watched by default)")
     ap.add_argument("--once", action="store_true", help="check once and exit")
     ap.add_argument("--dry-run", action="store_true", help="report only, do not stop/copy/start")
+    ap.add_argument("--no-editor", dest="editor", action="store_false", help="do not run the state tree editor")
+    ap.add_argument("--editor-port", type=int, default=8765, help="state tree editor port (default 8765)")
     args = ap.parse_args()
 
     log(f"watching {BUILD_DIR} -> {SERVER_DIR}")
-    while True:
-        try:
-            check(args)
-        except Exception as e:
-            log(f"ERROR: {e}")
-        if args.once:
-            break
-        time.sleep(args.interval)
+    if not args.dry_run:
+        write_editor_launcher(args.editor_port)
+    editor =start_editor(args.editor_port) if args.editor and not args.once else None
+    try:
+        while True:
+            try:
+                check(args)
+            except Exception as e:
+                log(f"ERROR: {e}")
+            if args.once:
+                break
+            # not restarted: an exit right away usually means the port is taken
+            if editor and editor.poll() is not None:
+                log(f"state tree editor exited with code {editor.returncode}")
+                editor = None
+            time.sleep(args.interval)
+    finally:
+        if editor and editor.poll() is None:
+            editor.terminate()
 
 
 if __name__ == "__main__":
