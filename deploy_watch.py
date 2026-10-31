@@ -10,7 +10,7 @@ Watch the mangos build output and redeploy to a server instance.
   statetree and the dungeon stages (mangosd reads both only when it starts / a dungeon is first created).
 - Starts realmd first (if it was stopped / not running), then mangosd, each in its own console.
 - Runs the state tree editor (PlayerBots tools/StateTreeEditor) on the source statetree, so a save there redeploys,
-  and writes SERVER_DIR/statetree/StateTreeEditor.bat that starts it (or opens the running one).
+  and writes SERVER_DIR/StateTreeEditor.bat that starts it (or opens the running one).
 
 Usage:
     python deploy_watch.py                 # watch forever
@@ -18,6 +18,7 @@ Usage:
     python deploy_watch.py --dry-run       # only report what would happen
     python deploy_watch.py --no-watch-statetree   # redeploy only for new binaries, not for statetree / stages edits
     python deploy_watch.py --no-editor     # do not run the state tree editor
+    python deploy_watch.py --force         # copy everything and (re)start the servers first, then watch
 """
 
 import argparse
@@ -35,7 +36,7 @@ BUILD_DIR = r"F:\progs\mangos\build\bin\x64_RelWithDebInfo"
 SERVER_DIR = r"F:\server\vanillanew"
 STATETREE_DIR = r"F:\progs\mangos\src\modules\PlayerBots\statetree"
 EDITOR_SCRIPT = r"F:\progs\mangos\src\modules\PlayerBots\tools\StateTreeEditor\serve.py"
-EDITOR_LAUNCHER = "StateTreeEditor.bat"  # written into the deployed statetree, not part of the source
+EDITOR_LAUNCHER = "StateTreeEditor.bat"  # written into SERVER_DIR
 DBC_DIR = os.path.join(SERVER_DIR, "dbc")  # the editor's spell lookup reads Spell.dbc
 # data directories copied with mangosd: (source, destination)
 DATA_DIRS = [
@@ -98,8 +99,6 @@ def tree_sig(root):
     sig = {}
     for dirpath, _, files in os.walk(root):
         for f in files:
-            if f == EDITOR_LAUNCHER and dirpath == root:
-                continue
             p = os.path.join(dirpath, f)
             sig[os.path.relpath(p, root).lower()] = file_sig(p)
     return sig
@@ -243,26 +242,39 @@ def copy_file(src, dst, retries=10):
 
 def write_editor_launcher(port):
     # serve.py fails when the port is taken (deploy_watch's own editor), then the running one is opened
-    dst_dir = os.path.join(SERVER_DIR, "statetree")
-    if not os.path.isdir(dst_dir):
-        return
-    with open(os.path.join(dst_dir, EDITOR_LAUNCHER), "w") as f:
+    with open(os.path.join(SERVER_DIR, EDITOR_LAUNCHER), "w") as f:
         f.write("@echo off\n"
-                "rem written by deploy_watch.py: edits the source trees, this folder is replaced on every deploy\n"
+                "rem written by deploy_watch.py: edits the source trees, the deployed statetree is replaced on every deploy\n"
                 f'python "{EDITOR_SCRIPT}" --port {port} --root "{STATETREE_DIR}" --dbc "{DBC_DIR}" --open'
                 f' || start "" http://127.0.0.1:{port}/\n')
 
 
-def deploy_data(editor_port):
+def clear_dir(path):
+    # empties the directory but keeps it: a console or Explorer with it open would make removing it fail half way
+    for entry in os.scandir(path):
+        try:
+            if entry.is_dir(follow_symlinks=False):
+                shutil.rmtree(entry.path)
+            else:
+                os.remove(entry.path)
+        except OSError as e:
+            log(f"  warning: could not remove {entry.path} ({e.strerror})")
+
+
+def deploy_data():
     for src_dir, dst_dir in DATA_DIRS:
         if not os.path.isdir(src_dir):
             log(f"  warning: {src_dir} missing, {dst_dir} left as it is")
             continue
         log(f"  replacing {dst_dir}")
         if os.path.isdir(dst_dir):
-            shutil.rmtree(dst_dir)
-        shutil.copytree(src_dir, dst_dir)
-    write_editor_launcher(editor_port)
+            clear_dir(dst_dir)
+        try:
+            shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
+        except shutil.Error as e:
+            # copytree copies everything it can and lists the failures at the end
+            for src, dst, why in e.args[0]:
+                log(f"  warning: could not copy {src} ({why})")
 
 
 # ---------------------------------------------------------------- main
@@ -290,7 +302,7 @@ def deploy(changed, args):
                 log(f"  copying {f}")
                 copy_file(src, os.path.join(SERVER_DIR, f))
         if name == "mangosd":
-            deploy_data(args.editor_port)
+            deploy_data()
 
     for name in SERVERS:
         running = bool(find_processes(name))
@@ -328,12 +340,16 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="report only, do not stop/copy/start")
     ap.add_argument("--no-editor", dest="editor", action="store_false", help="do not run the state tree editor")
     ap.add_argument("--editor-port", type=int, default=8765, help="state tree editor port (default 8765)")
+    ap.add_argument("--force", action="store_true",
+                    help="at startup copy all binaries, statetree and stages and (re)start the servers, changed or not")
     args = ap.parse_args()
 
     log(f"watching {BUILD_DIR} -> {SERVER_DIR}")
     if not args.dry_run:
         write_editor_launcher(args.editor_port)
-    editor =start_editor(args.editor_port) if args.editor and not args.once else None
+    if args.force:
+        deploy(list(SERVERS), args)
+    editor = start_editor(args.editor_port) if args.editor and not args.once else None
     try:
         while True:
             try:
