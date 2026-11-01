@@ -10,7 +10,8 @@ Watch the mangos build output and redeploy to a server instance.
   statetree and the dungeon stages (mangosd reads both only when it starts / a dungeon is first created).
 - Starts realmd first (if it was stopped / not running), then mangosd, each in its own console.
 - Runs the state tree editor (PlayerBots tools/StateTreeEditor) on the source statetree, so a save there redeploys,
-  and writes SERVER_DIR/StateTreeEditor.bat that starts it (or opens the running one).
+  and writes SERVER_DIR/StateTreeEditor.bat that starts it (or opens the running one). The editor is reachable from
+  EDITOR_ALLOW (the home network) too.
 
 Usage:
     python deploy_watch.py                 # watch forever
@@ -38,6 +39,7 @@ STATETREE_DIR = r"F:\progs\mangos\src\modules\PlayerBots\statetree"
 EDITOR_SCRIPT = r"F:\progs\mangos\src\modules\PlayerBots\tools\StateTreeEditor\serve.py"
 EDITOR_LAUNCHER = "StateTreeEditor.bat"  # written into SERVER_DIR
 DBC_DIR = os.path.join(SERVER_DIR, "dbc")  # the editor's spell lookup reads Spell.dbc
+EDITOR_ALLOW = "192.168.1.0/24"  # other computers that may use the editor
 # data directories copied with mangosd: (source, destination)
 DATA_DIRS = [
     (STATETREE_DIR, os.path.join(SERVER_DIR, "statetree")),
@@ -221,8 +223,9 @@ def start_editor(port):
     if not os.path.exists(EDITOR_SCRIPT):
         log(f"warning: {EDITOR_SCRIPT} missing, no state tree editor")
         return None
-    log(f"state tree editor: http://127.0.0.1:{port}/")
-    return subprocess.Popen([sys.executable, EDITOR_SCRIPT, "--port", str(port), "--root", STATETREE_DIR, "--dbc", DBC_DIR])
+    log(f"state tree editor: http://127.0.0.1:{port}/ (and from {EDITOR_ALLOW})")
+    return subprocess.Popen([sys.executable, EDITOR_SCRIPT, "--port", str(port), "--root", STATETREE_DIR, "--dbc", DBC_DIR,
+                             "--host", "0.0.0.0", "--allow", EDITOR_ALLOW])
 
 
 # ---------------------------------------------------------------- copying
@@ -245,7 +248,8 @@ def write_editor_launcher(port):
     with open(os.path.join(SERVER_DIR, EDITOR_LAUNCHER), "w") as f:
         f.write("@echo off\n"
                 "rem written by deploy_watch.py: edits the source trees, the deployed statetree is replaced on every deploy\n"
-                f'python "{EDITOR_SCRIPT}" --port {port} --root "{STATETREE_DIR}" --dbc "{DBC_DIR}" --open'
+                f'python "{EDITOR_SCRIPT}" --port {port} --root "{STATETREE_DIR}" --dbc "{DBC_DIR}"'
+                f' --host 0.0.0.0 --allow {EDITOR_ALLOW} --open'
                 f' || start "" http://127.0.0.1:{port}/\n')
 
 
