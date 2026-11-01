@@ -84,7 +84,7 @@
 #include "playerbot/RandomPlayerbotMgr.h"
 #include "playerbot/PlayerbotMapServer.h"
 #include "playerbot/ItemEvalSubsystem.h"
-#include "MotionGenerators/PathfindingWorker.h"
+#include "MotionGenerators/PathSubsystem.h"
 #endif
 
 #include "Spells/SpellAuraWorldSubsystem.h"
@@ -165,6 +165,7 @@ World::World(): mail_timer(0), mail_timer_expires(0), m_NextWeeklyQuestReset(0),
     RegisterSubsystem<DungeonPlannerSubsystem>();
 #ifdef ENABLE_PLAYERBOTS
     RegisterSubsystem<ItemEvalSubsystem>();
+    RegisterSubsystem<PathSubsystem>();
 #endif
 }
 
@@ -185,7 +186,8 @@ World::~World()
 
 #ifdef ENABLE_PLAYERBOTS
     // its threads use the mmaps
-    sPathfindingWorker.Shutdown();
+    if (PathSubsystem* paths = GetSubsystem<PathSubsystem>())
+        paths->Shutdown();
 #endif
     VMAP::VMapFactory::clear();
     MMAP::MMapFactory::clear();

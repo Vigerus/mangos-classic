@@ -52,7 +52,7 @@ class PointMovementGenerator : public MovementGenerator
         MovementGeneratorType GetMovementGeneratorType() const override { return POINT_MOTION_TYPE; }
 
 #ifdef ENABLE_PLAYERBOTS
-        // opt-in: the path is calculated by the PathfindingWorker, the unit stands until it is there
+        // opt-in: the path is calculated by the PathSubsystem, the unit stands until it is there
         void SetAsyncPath(bool async) { m_asyncPath = async; }
 #endif
 

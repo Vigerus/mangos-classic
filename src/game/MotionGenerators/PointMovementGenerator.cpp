@@ -23,7 +23,7 @@
 #include "Entities/TemporarySpawn.h"
 #include "AI/BaseAI/UnitAI.h"
 #ifdef ENABLE_PLAYERBOTS
-#include "MotionGenerators/PathfindingWorker.h"
+#include "MotionGenerators/PathSubsystem.h"
 #include "World/World.h"
 #endif
 
@@ -123,7 +123,9 @@ bool PointMovementGenerator::UpdateAsyncPath(Unit& unit)
     if (request->IsReady() && !request->segments.empty() && request->segments.front().points.size() >= 2)
     {
         // the worker has no unit to put the points on the ground with
-        PointsArray points = request->segments.front().points;
+        // a long way is walked in pieces: the move ends short and is given again
+        PointsArray const& path = request->segments.front().points;
+        PointsArray points(path.begin(), path.begin() + PathSubsystem::SplinePieceEnd(path, 0) + 1);
         if (sWorld.getConfig(CONFIG_BOOL_PATH_FIND_NORMALIZE_Z))
             for (Vector3& point : points)
                 unit.UpdateAllowedPositionZ(point.x, point.y, point.z);
@@ -145,7 +147,7 @@ void PointMovementGenerator::Move(Unit& unit)
     {
         float x, y, z;
         unit.GetPosition(x, y, z);
-        m_pathRequest = sPathfindingWorker.Request(unit.GetMapId(), Vector3(x, y, z), unit.GetMapId(), Vector3(m_x, m_y, m_z), false);
+        m_pathRequest = sWorld.GetSubsystem<PathSubsystem>()->Request(unit.GetMapId(), Vector3(x, y, z), unit.GetMapId(), Vector3(m_x, m_y, m_z), false);
         return;
     }
 #endif
