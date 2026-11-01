@@ -85,6 +85,7 @@
 #include "playerbot/PlayerbotMapServer.h"
 #include "playerbot/ItemEvalSubsystem.h"
 #include "MotionGenerators/PathSubsystem.h"
+#include "Combat/CombatWinChanceSubsystem.h"
 #endif
 
 #include "Spells/SpellAuraWorldSubsystem.h"
@@ -166,6 +167,7 @@ World::World(): mail_timer(0), mail_timer_expires(0), m_NextWeeklyQuestReset(0),
 #ifdef ENABLE_PLAYERBOTS
     RegisterSubsystem<ItemEvalSubsystem>();
     RegisterSubsystem<PathSubsystem>();
+    RegisterSubsystem<CombatWinChanceSubsystem>();
 #endif
 }
 
