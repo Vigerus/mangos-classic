@@ -9856,6 +9856,9 @@ Item* Player::StoreNewItem(ItemPosCountVec const& dest, uint32 item, bool update
         pItem = StoreItem(dest, pItem, update);
 
         GlobalEventSubsystem::instance().GetOnItemCreatedDelegate().Broadcast(this, item);
+        if (pItem && IsInWorld())
+            if (TeamSubsystem* teams = sWorld.GetSubsystem<TeamSubsystem>())
+                teams->BroadcastItemReceived(this, pItem->GetObjectGuid(), item);
     }
     return pItem;
 }

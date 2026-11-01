@@ -83,6 +83,7 @@
 #include "playerbot/PlayerbotAIConfig.h"
 #include "playerbot/RandomPlayerbotMgr.h"
 #include "playerbot/PlayerbotMapServer.h"
+#include "playerbot/ItemEvalSubsystem.h"
 #include "MotionGenerators/PathfindingWorker.h"
 #endif
 
@@ -162,6 +163,9 @@ World::World(): mail_timer(0), mail_timer_expires(0), m_NextWeeklyQuestReset(0),
     RegisterSubsystem<TeamSubsystem>();
     RegisterSubsystem<InstanceSubsystem>();
     RegisterSubsystem<DungeonPlannerSubsystem>();
+#ifdef ENABLE_PLAYERBOTS
+    RegisterSubsystem<ItemEvalSubsystem>();
+#endif
 }
 
 /// World destructor
